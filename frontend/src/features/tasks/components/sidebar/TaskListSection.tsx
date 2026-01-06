@@ -92,10 +92,9 @@ export default function TaskListSection({
     // between list items and task details
     markTaskAsViewed(task.id, task.status)
 
-    // DO NOT call setSelectedTask here! Let TaskParamSync handle it via URL changes
-    // This prevents duplicate API requests caused by calling setSelectedTask twice:
-    // once here and once in TaskParamSync when URL changes
-    // The taskContext's useEffect will trigger refreshSelectedTaskDetail when selectedTask changes
+    // IMPORTANT: Set selected task immediately to prevent visual flicker
+    // This ensures the task is highlighted before navigation completes
+    setSelectedTask(task)
 
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams()

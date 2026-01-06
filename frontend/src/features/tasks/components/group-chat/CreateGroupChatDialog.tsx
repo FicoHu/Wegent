@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useToast } from '@/hooks/use-toast'
-import { Team } from '@/types/api'
+import { Team, Task } from '@/types/api'
 import {
   Select,
   SelectContent,
@@ -49,7 +49,7 @@ export function CreateGroupChatDialog({ open, onOpenChange }: CreateGroupChatDia
 
   const { teams, isTeamsLoading } = teamService.useTeams()
   const { sendMessage } = useChatStreamContext()
-  const { refreshTasks } = useTaskContext()
+  const { refreshTasks, setSelectedTask } = useTaskContext()
   const { user } = useUser()
 
   // Filter teams to only show chat-type teams (agent_type === 'chat')
@@ -135,8 +135,14 @@ export function CreateGroupChatDialog({ open, onOpenChange }: CreateGroupChatDia
             // Refresh task list to show the new group chat
             refreshTasks()
 
-            // DO NOT call setSelectedTask here! Let TaskParamSync handle it via URL changes
-            // This prevents duplicate API requests
+            // Set selected task with is_group_chat flag BEFORE navigation
+            // This ensures ChatArea receives the correct isGroupChat prop immediately
+            setSelectedTask({
+              id: realTaskId,
+              title: title,
+              team_id: selectedTeam?.id || 0,
+              is_group_chat: true,
+            } as Task)
 
             // Navigate to the new task to show streaming output
             router.push(`/chat?taskId=${realTaskId}`)

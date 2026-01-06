@@ -123,8 +123,7 @@ export default function SearchDialog({
   // Handle task click in dialog
   const handleDialogTaskClick = (task: Task) => {
     handleCloseSearchDialog()
-    // DO NOT call setSelectedTask here! Let TaskParamSync handle it via URL changes
-    // This prevents duplicate API requests
+    setSelectedTask(task)
     // Navigate to task with taskId parameter
     const targetPath = task.task_type === 'code' ? paths.code.getHref() : paths.chat.getHref()
     router.push(`${targetPath}?taskId=${task.id}`)
