@@ -1277,19 +1277,25 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
         user = db.query(User).filter(User.id == user_id).first()
 
         # Get related team
+        # IMPORTANT: For group chat members, the team_id in task_dict is queried using
+        # task owner's user_id (in _convert_to_task_dict). We need to use task owner's
+        # user_id consistently to find the team.
         team_id = task_dict.get("team_id")
         team = None
+
+        # Get the task owner's user_id for team queries
+        task_owner_id = task_member_service.get_task_owner_id(db, task_id)
+
         if team_id:
             logger.info(
-                f"[get_task_detail] task_id={task_id}, team_id={team_id}, user_id={user_id}"
+                f"[get_task_detail] task_id={task_id}, team_id={team_id}, user_id={user_id}, task_owner_id={task_owner_id}"
             )
             team = db.query(Kind).filter(Kind.id == team_id).first()
             if team:
                 # For both owner and group members, use the task owner's user_id to get team info
                 # This ensures group members can see the team's bots and configuration
-                task_owner_id = task_member_service.get_task_owner_id(db, task_id)
                 logger.info(
-                    f"[get_task_detail] task_owner_id={task_owner_id}, team found: {team is not None}"
+                    f"[get_task_detail] team found: {team is not None}"
                 )
                 if task_owner_id:
                     team = team_kinds_service._convert_to_team_dict(
@@ -1308,7 +1314,72 @@ class TaskKindsService(BaseService[Kind, TaskCreate, TaskUpdate]):
                     f"[get_task_detail] team not found for team_id={team_id}"
                 )
         else:
-            logger.info(f"[get_task_detail] task_id={task_id} has no team_id")
+            # If team_id is None, try to get team from task's teamRef using task owner's user_id
+            logger.info(f"[get_task_detail] task_id={task_id} has no team_id, trying to get from teamRef")
+
+            # Get task to read teamRef
+            task = (
+                db.query(TaskResource)
+                .filter(
+                    TaskResource.id == task_id,
+                    TaskResource.kind == "Task",
+                    TaskResource.is_active == True,
+                )
+                .first()
+            )
+
+            if task and task.json and task_owner_id:
+                task_crd = Task.model_validate(task.json)
+                team_name = task_crd.spec.teamRef.name
+                team_namespace = task_crd.spec.teamRef.namespace
+
+                # Query team using task owner's user_id
+                team_obj = (
+                    db.query(Kind)
+                    .filter(
+                        Kind.user_id == task_owner_id,
+                        Kind.kind == "Team",
+                        Kind.name == team_name,
+                        Kind.namespace == team_namespace,
+                        Kind.is_active == True,
+                    )
+                    .first()
+                )
+
+                # If not found in owner's teams, check shared teams
+                if not team_obj:
+                    shared_teams = (
+                        db.query(SharedTeam)
+                        .filter(SharedTeam.user_id == task_owner_id, SharedTeam.is_active == True)
+                        .all()
+                    )
+                    original_user_ids = [st.original_user_id for st in shared_teams]
+                    if original_user_ids:
+                        team_obj = (
+                            db.query(Kind)
+                            .filter(
+                                Kind.user_id.in_(original_user_ids),
+                                Kind.kind == "Team",
+                                Kind.name == team_name,
+                                Kind.namespace == team_namespace,
+                                Kind.is_active == True,
+                            )
+                            .first()
+                        )
+
+                if team_obj:
+                    team_id = team_obj.id
+                    task_dict["team_id"] = team_id
+                    team = team_kinds_service._convert_to_team_dict(
+                        team_obj, db, task_owner_id
+                    )
+                    logger.info(
+                        f"[get_task_detail] found team from teamRef: team_id={team_id}"
+                    )
+                else:
+                    logger.warning(
+                        f"[get_task_detail] team not found for teamRef name={team_name}, namespace={team_namespace}"
+                    )
 
         # Get related subtasks
         # Use from_latest=True to get the latest N messages (default behavior for group chat)

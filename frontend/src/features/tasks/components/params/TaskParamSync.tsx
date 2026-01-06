@@ -29,12 +29,16 @@ export default function TaskParamSync() {
   const selectedTaskDetailRef = useRef(selectedTaskDetail);
   selectedTaskDetailRef.current = selectedTaskDetail;
 
+  // Track the last taskId we processed to prevent duplicate requests
+  const lastProcessedTaskIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     const taskId = searchParams.get('taskId');
 
     // If no taskId in URL, clear selection
     // Use ref to check current state without adding to dependencies
     if (!taskId) {
+      lastProcessedTaskIdRef.current = null;
       if (selectedTaskDetailRef.current) {
         setSelectedTask(null);
       }
@@ -43,8 +47,19 @@ export default function TaskParamSync() {
 
     // If taskId in URL already matches selected task, do nothing
     if (String(selectedTaskDetailRef.current?.id) === taskId) {
+      lastProcessedTaskIdRef.current = taskId;
       return;
     }
+
+    // If we already processed this taskId, skip to avoid duplicate requests
+    // This happens when TaskListSection.handleTaskClick calls setSelectedTask
+    // before navigation, and then this effect runs after URL changes
+    if (lastProcessedTaskIdRef.current === taskId) {
+      return;
+    }
+
+    // Mark this taskId as processed
+    lastProcessedTaskIdRef.current = taskId;
 
     // If taskId is present but doesn't match, verify and set it
     const verifyAndSetTask = async () => {
