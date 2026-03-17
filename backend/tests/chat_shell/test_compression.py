@@ -505,10 +505,10 @@ class TestHistoryTruncationStrategy:
         # Should keep system message
         assert compressed[0]["role"] == "system"
 
-    def test_truncation_notice_maintains_alternation(self):
+    def test_truncation_notice_maintains_alternation_anthropic(self):
         """Test that truncation notice maintains user/assistant alternation for Anthropic."""
         strategy = HistoryTruncationStrategy()
-        counter = TokenCounter(model_id="gpt-4")
+        counter = TokenCounter(model_id="claude-3-5-sonnet")
         config = CompressionConfig(first_messages_to_keep=1, last_messages_to_keep=2)
 
         # Create conversation with many messages to trigger truncation
@@ -552,10 +552,10 @@ class TestHistoryTruncationStrategy:
         )
         assert notice_found
 
-    def test_truncation_notice_bridges_odd_removal(self):
+    def test_truncation_notice_bridges_odd_removal_anthropic(self):
         """Test notice is inserted as separate message when odd removal breaks alternation."""
         strategy = HistoryTruncationStrategy()
-        counter = TokenCounter(model_id="gpt-4")
+        counter = TokenCounter(model_id="claude-3-5-sonnet")
         # first_messages_to_keep=1 keeps user_0,
         # last_messages_to_keep=2 keeps the last 2 messages
         config = CompressionConfig(first_messages_to_keep=1, last_messages_to_keep=2)
@@ -583,10 +583,10 @@ class TestHistoryTruncationStrategy:
                     f"{non_system[i-1]['role']} -> {non_system[i]['role']}"
                 )
 
-    def test_truncation_notice_merged_when_even_removal(self):
+    def test_truncation_notice_merged_when_even_removal_anthropic(self):
         """Test notice is merged into next message when even removal preserves alternation."""
         strategy = HistoryTruncationStrategy()
-        counter = TokenCounter(model_id="gpt-4")
+        counter = TokenCounter(model_id="claude-3-5-sonnet")
         config = CompressionConfig(first_messages_to_keep=1, last_messages_to_keep=1)
 
         # Build: system, user_0, assistant_0, user_1, assistant_1, user_2
@@ -619,6 +619,43 @@ class TestHistoryTruncationStrategy:
                 "SYSTEM NOTICE" in m.get("content", "") for m in compressed
             )
             assert notice_found
+
+    def test_truncation_notice_uses_system_role_for_openai(self):
+        """Test that OpenAI models keep original role='system' for truncation notice."""
+        strategy = HistoryTruncationStrategy()
+        counter = TokenCounter(model_id="gpt-4")
+        config = CompressionConfig(first_messages_to_keep=1, last_messages_to_keep=2)
+
+        # Create conversation with many messages to trigger truncation
+        messages = [{"role": "system", "content": "You are a helpful assistant."}]
+        for i in range(10):
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"This is user message number {i} with some additional text to increase token count.",
+                }
+            )
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": f"This is the assistant response number {i} with some additional text to increase token count.",
+                }
+            )
+
+        compressed, details = strategy.compress(messages, counter, 50, config)
+        assert details["messages_removed"] > 0
+
+        # Find the truncation notice
+        truncation_notices = [
+            m
+            for m in compressed
+            if "SYSTEM NOTICE" in m.get("content", "")
+            and m.get("content", "").startswith("[SYSTEM NOTICE")
+        ]
+        assert len(truncation_notices) == 1
+
+        # OpenAI should keep role="system" (original behavior)
+        assert truncation_notices[0]["role"] == "system"
 
     def test_no_truncation_for_short_history(self):
         """Test that short history is not truncated."""
