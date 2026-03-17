@@ -702,7 +702,7 @@ class HistoryTruncationStrategy(CompressionStrategy):
         # Build result with truncation notice if any messages were removed
         if messages_to_remove > 0:
             truncation_notice_msg = {
-                "role": "system",
+                "role": "user",
                 "content": self.TRUNCATION_NOTICE,
             }
 

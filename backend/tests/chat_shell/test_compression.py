@@ -505,6 +505,56 @@ class TestHistoryTruncationStrategy:
         # Should keep system message
         assert compressed[0]["role"] == "system"
 
+    def test_truncation_notice_uses_user_role(self):
+        """Test that truncation notice uses role='user' for Anthropic compatibility."""
+        strategy = HistoryTruncationStrategy()
+        counter = TokenCounter(model_id="gpt-4")
+        config = CompressionConfig(first_messages_to_keep=1, last_messages_to_keep=2)
+
+        # Create conversation with many messages to trigger truncation
+        messages = [{"role": "system", "content": "You are a helpful assistant."}]
+        for i in range(10):
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"This is user message number {i} with some additional text to increase token count.",
+                }
+            )
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": f"This is the assistant response number {i} with some additional text to increase token count.",
+                }
+            )
+
+        # Use a very low target to ensure truncation happens
+        compressed, details = strategy.compress(messages, counter, 50, config)
+        assert details["messages_removed"] > 0
+
+        # Only the first message should have role="system"
+        system_messages = [
+            (i, m) for i, m in enumerate(compressed) if m["role"] == "system"
+        ]
+        assert len(system_messages) == 1
+        assert system_messages[0][0] == 0
+
+        # Find the truncation notice by content
+        truncation_notices = [
+            (i, m)
+            for i, m in enumerate(compressed)
+            if "SYSTEM NOTICE" in m.get("content", "")
+        ]
+        assert len(truncation_notices) == 1
+        notice_idx, notice_msg = truncation_notices[0]
+
+        # Truncation notice must use role="user", not "system"
+        assert notice_msg["role"] == "user"
+
+        # Truncation notice should appear after system + first_messages
+        # (system at index 0, first_messages_to_keep=1 non-system msg at index 1,
+        #  so truncation notice should be at index 2)
+        assert notice_idx > 1
+
     def test_no_truncation_for_short_history(self):
         """Test that short history is not truncated."""
         strategy = HistoryTruncationStrategy()
