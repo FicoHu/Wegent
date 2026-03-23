@@ -76,7 +76,7 @@ async def get_all_devices(
     bind_shell: Optional[str] = Query(None, description="Filter by bind shell"),
     search: Optional[str] = Query(None, description="Search by device name or ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(security.require_admin),
+    current_user: User = Depends(security.get_admin_user),
 ):
     """
     Get all devices across all users for admin monitoring.
@@ -201,7 +201,7 @@ async def get_all_devices(
 @router.get("/stats", response_model=AdminDeviceStats)
 async def get_device_stats(
     db: Session = Depends(get_db),
-    current_user: User = Depends(security.require_admin),
+    current_user: User = Depends(security.get_admin_user),
 ):
     """
     Get device statistics for admin monitoring.
