@@ -89,7 +89,7 @@ function getDeviceTypeTag(deviceType: DeviceType, t: (key: string) => string) {
       )
     case 'cloud':
       return (
-        <Tag variant="primary" className="flex items-center gap-1">
+        <Tag variant="info" className="flex items-center gap-1">
           <Cloud className="w-3 h-3" />
           {t('admin:device_monitor.device_type.cloud')}
         </Tag>
