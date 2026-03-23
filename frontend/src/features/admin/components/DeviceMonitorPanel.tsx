@@ -123,8 +123,17 @@ export function DeviceMonitorPanel() {
   const [deviceTypeFilter, setDeviceTypeFilter] = useState<string>('all')
   const [bindShellFilter, setBindShellFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
   const limit = 20
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const loadStats = useCallback(async () => {
     try {
@@ -141,7 +150,7 @@ export function DeviceMonitorPanel() {
       const status = statusFilter === 'all' ? undefined : (statusFilter as DeviceStatus)
       const deviceType = deviceTypeFilter === 'all' ? undefined : (deviceTypeFilter as DeviceType)
       const bindShell = bindShellFilter === 'all' ? undefined : (bindShellFilter as BindShell)
-      const searchTerm = search.trim() || undefined
+      const searchTerm = debouncedSearch.trim() || undefined
 
       const data = await adminApis.getDevices(
         page,
@@ -157,7 +166,7 @@ export function DeviceMonitorPanel() {
       console.error('Failed to load devices:', error)
       toast.error(t('admin:device_monitor.errors.load_failed'))
     }
-  }, [page, statusFilter, deviceTypeFilter, bindShellFilter, search, t])
+  }, [page, statusFilter, deviceTypeFilter, bindShellFilter, debouncedSearch, t])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -177,7 +186,7 @@ export function DeviceMonitorPanel() {
 
   useEffect(() => {
     setPage(1)
-  }, [statusFilter, deviceTypeFilter, bindShellFilter, search])
+  }, [statusFilter, deviceTypeFilter, bindShellFilter, debouncedSearch])
 
   if (isLoading) {
     return (
