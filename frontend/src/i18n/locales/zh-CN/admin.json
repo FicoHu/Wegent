@@ -822,6 +822,7 @@
     },
     "stats": {
       "total": "总设备数",
+      "user_count": "用户数量",
       "online": "在线",
       "offline": "离线",
       "busy": "忙碌",

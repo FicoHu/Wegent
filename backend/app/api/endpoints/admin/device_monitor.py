@@ -56,6 +56,7 @@ class AdminDeviceStats(BaseModel):
     """Statistics for admin device monitoring."""
 
     total: int = Field(..., description="Total device count")
+    user_count: int = Field(..., description="Total user count with devices")
     by_status: Dict[str, int] = Field(
         ..., description="Count by status (online, offline, busy)"
     )
@@ -241,6 +242,9 @@ async def get_device_stats(
         BindShell.OPENCLAW.value: 0,
     }
 
+    # Count unique users with devices
+    user_ids = {d.user_id for d in device_kinds}
+
     # Count devices
     for device_kind in device_kinds:
         spec = device_kind.json.get("spec", {})
@@ -276,6 +280,7 @@ async def get_device_stats(
 
     return AdminDeviceStats(
         total=len(device_kinds),
+        user_count=len(user_ids),
         by_status=by_status,
         by_device_type=by_device_type,
         by_bind_shell=by_bind_shell,

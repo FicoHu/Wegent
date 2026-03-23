@@ -15,7 +15,17 @@ import {
   BindShell,
 } from '@/apis/admin'
 import { toast } from 'sonner'
-import { Monitor, Wifi, WifiOff, Clock, Cloud, HardDrive, RefreshCw, Search } from 'lucide-react'
+import {
+  Monitor,
+  Wifi,
+  WifiOff,
+  Clock,
+  Cloud,
+  HardDrive,
+  RefreshCw,
+  Search,
+  Users,
+} from 'lucide-react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -206,11 +216,16 @@ export function DeviceMonitorPanel() {
 
       {/* Stats Grid */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           <StatCard
             title={t('admin:device_monitor.stats.total')}
             value={stats.total}
             icon={<Monitor className="h-5 w-5" />}
+          />
+          <StatCard
+            title={t('admin:device_monitor.stats.user_count')}
+            value={stats.user_count}
+            icon={<Users className="h-5 w-5" />}
           />
           <StatCard
             title={t('admin:device_monitor.stats.online')}

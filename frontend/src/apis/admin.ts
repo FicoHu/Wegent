@@ -438,6 +438,7 @@ export interface AdminDeviceListResponse {
 
 export interface AdminDeviceStats {
   total: number
+  user_count: number
   by_status: Record<string, number>
   by_device_type: Record<string, number>
   by_bind_shell: Record<string, number>
