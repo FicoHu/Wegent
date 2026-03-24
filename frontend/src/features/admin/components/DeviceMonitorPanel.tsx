@@ -6,14 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
-import {
-  adminApis,
-  AdminDeviceInfo,
-  AdminDeviceStats,
-  DeviceStatus,
-  DeviceType,
-  BindShell,
-} from '@/apis/admin'
+import { adminApis, AdminDeviceInfo, AdminDeviceStats, DeviceType, BindShell } from '@/apis/admin'
 import { toast } from 'sonner'
 import { Monitor, Wifi, WifiOff, Cloud, HardDrive, RefreshCw, Search, Users } from 'lucide-react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
@@ -65,7 +58,7 @@ function StatCard({ title, value, icon, variant = 'default' }: StatCardProps) {
   )
 }
 
-function getStatusTag(status: DeviceStatus, t: (key: string) => string) {
+function getStatusTag(status: string, t: (key: string) => string) {
   switch (status) {
     case 'online':
       return <Tag variant="success">{t('admin:device_monitor.status.online')}</Tag>
@@ -119,7 +112,6 @@ export function DeviceMonitorPanel() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Filter states
-  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [deviceTypeFilter, setDeviceTypeFilter] = useState<string>('all')
   const [bindShellFilter, setBindShellFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
@@ -147,26 +139,18 @@ export function DeviceMonitorPanel() {
 
   const loadDevices = useCallback(async () => {
     try {
-      const status = statusFilter === 'all' ? undefined : (statusFilter as DeviceStatus)
       const deviceType = deviceTypeFilter === 'all' ? undefined : (deviceTypeFilter as DeviceType)
       const bindShell = bindShellFilter === 'all' ? undefined : (bindShellFilter as BindShell)
       const searchTerm = debouncedSearch.trim() || undefined
 
-      const data = await adminApis.getDevices(
-        page,
-        limit,
-        status,
-        deviceType,
-        bindShell,
-        searchTerm
-      )
+      const data = await adminApis.getDevices(page, limit, deviceType, bindShell, searchTerm)
       setDevices(data.items)
       setTotal(data.total)
     } catch (error) {
       console.error('Failed to load devices:', error)
       toast.error(t('admin:device_monitor.errors.load_failed'))
     }
-  }, [page, statusFilter, deviceTypeFilter, bindShellFilter, debouncedSearch, t])
+  }, [page, deviceTypeFilter, bindShellFilter, debouncedSearch, t])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -186,7 +170,7 @@ export function DeviceMonitorPanel() {
 
   useEffect(() => {
     setPage(1)
-  }, [statusFilter, deviceTypeFilter, bindShellFilter, debouncedSearch])
+  }, [deviceTypeFilter, bindShellFilter, debouncedSearch])
 
   if (isLoading) {
     return (
@@ -263,17 +247,6 @@ export function DeviceMonitorPanel() {
             data-testid="device-search-input"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[140px]" data-testid="status-filter-select">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('admin:device_monitor.filters.all_status')}</SelectItem>
-            <SelectItem value="online">{t('admin:device_monitor.status.online')}</SelectItem>
-            <SelectItem value="offline">{t('admin:device_monitor.status.offline')}</SelectItem>
-            <SelectItem value="busy">{t('admin:device_monitor.status.busy')}</SelectItem>
-          </SelectContent>
-        </Select>
         <Select value={deviceTypeFilter} onValueChange={setDeviceTypeFilter}>
           <SelectTrigger className="w-[140px]" data-testid="device-type-filter-select">
             <SelectValue />

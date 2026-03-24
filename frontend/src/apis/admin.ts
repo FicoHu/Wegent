@@ -951,8 +951,7 @@ export const adminApis = {
    */
   async getDevices(
     page: number = 1,
-    limit: number = 50,
-    status?: DeviceStatus,
+    limit: number = 20,
     deviceType?: DeviceType,
     bindShell?: BindShell,
     search?: string
@@ -960,9 +959,6 @@ export const adminApis = {
     const params = new URLSearchParams()
     params.append('page', String(page))
     params.append('limit', String(limit))
-    if (status) {
-      params.append('status', status)
-    }
     if (deviceType) {
       params.append('device_type', deviceType)
     }

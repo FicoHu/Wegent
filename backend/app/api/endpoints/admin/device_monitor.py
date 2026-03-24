@@ -128,24 +128,6 @@ def _filter_devices(
     return filtered
 
 
-def _apply_status_filter(
-    devices: List[AdminDeviceInfo],
-    status: Optional[str],
-) -> List[AdminDeviceInfo]:
-    """Apply status filter to device list.
-
-    Args:
-        devices: List of AdminDeviceInfo objects
-        status: Filter by status (online/offline/busy)
-
-    Returns:
-        Filtered list of AdminDeviceInfo objects
-    """
-    if not status:
-        return devices
-    return [d for d in devices if d.status == status]
-
-
 async def _get_devices_redis_status(
     device_kinds: List[Kind],
 ) -> Dict[str, Any]:
@@ -221,7 +203,6 @@ def _build_device_info(
 async def get_all_devices(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    status: Optional[str] = Query(None, description="Filter by status"),
     device_type: Optional[str] = Query(None, description="Filter by device type"),
     bind_shell: Optional[str] = Query(None, description="Filter by bind shell"),
     search: Optional[str] = Query(
@@ -236,12 +217,13 @@ async def get_all_devices(
     1. Loads all devices from database (necessary for json field filtering)
     2. Applies filters in memory (device_type, bind_shell, search)
     3. Only queries Redis for the current page devices (batch mget)
-    4. Applies status filter after getting Redis data
+
+    Note: Status filter is removed for performance. Status is displayed
+    but cannot be used as a filter criterion.
 
     Args:
         page: Page number (1-indexed)
         limit: Items per page
-        status: Filter by device status (online/offline/busy)
         device_type: Filter by device type (local/cloud)
         bind_shell: Filter by bind shell (claudecode/openclaw)
         search: Search by device name, device ID or username
@@ -283,7 +265,7 @@ async def get_all_devices(
     # Step 5: Get Redis status for current page only (batch query)
     online_info_map = await _get_devices_redis_status(page_kinds)
 
-    # Step 6: Build device info and apply status filter
+    # Step 6: Build device info list
     items = []
     for kind in page_kinds:
         spec = kind.json.get("spec", {}) if kind.json else {}
@@ -292,16 +274,7 @@ async def get_all_devices(
         online_info = online_info_map.get(redis_key)
 
         device_info = _build_device_info(kind, users_map, online_info)
-
-        # Apply status filter
-        if status and device_info.status != status:
-            continue
-
         items.append(device_info)
-
-    # Note: If status filter removed items from this page, the page may have fewer items.
-    # This is acceptable for admin monitoring UI. For exact pagination with status filter,
-    # we would need to query all Redis status first, which defeats the optimization.
 
     return AdminDeviceListResponse(items=items, total=total)
 
