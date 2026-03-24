@@ -361,7 +361,7 @@ async def get_device_stats(
     online_info_map = await cache_manager.mget(redis_keys)
 
     # Count by status
-    for i, _ in enumerate(device_metadata):
+    for i, metadata in enumerate(device_metadata):
         redis_key = redis_keys[i]
         online_info = online_info_map.get(redis_key)
 
@@ -370,7 +370,11 @@ async def get_device_stats(
         else:
             status_val = DeviceStatusEnum.OFFLINE.value
 
-        if status_val in by_status:
+        # Only count offline cloud devices (not all offline devices)
+        if status_val == DeviceStatusEnum.OFFLINE.value:
+            if metadata["type"] == DeviceType.CLOUD.value:
+                by_status[status_val] += 1
+        elif status_val in by_status:
             by_status[status_val] += 1
 
     result = AdminDeviceStats(

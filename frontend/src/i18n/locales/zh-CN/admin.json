@@ -13,7 +13,7 @@
     "api_keys": "密钥管理",
     "system_config": "系统配置",
     "im_channels": "IM 渠道",
-    "monitor": "监控",
+    "monitor": "订阅监控",
     "device_monitor": "设备监控"
   },
   "stats": {
@@ -824,7 +824,7 @@
       "total": "总设备数",
       "user_count": "用户数量",
       "online": "在线",
-      "offline": "离线",
+      "offline": "离线云设备",
       "busy": "忙碌",
       "local": "本地设备",
       "cloud": "云设备"
