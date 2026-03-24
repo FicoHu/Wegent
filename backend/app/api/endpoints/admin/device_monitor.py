@@ -8,7 +8,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from app.models.kind import Kind
 from app.models.user import User
 from app.schemas.device import BindShell, DeviceStatusEnum, DeviceType
 from app.services.device.local_provider import local_device_provider
+from app.services.device_service import DeviceService as device_service
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,40 @@ router = APIRouter(prefix="/device-monitor")
 
 # Stats cache configuration
 _STATS_CACHE = {"data": None, "timestamp": 0, "ttl": 30}  # 30 seconds cache
+
+
+# ==================== Request/Response Models ====================
+
+
+class AdminDeviceUpgradeRequest(BaseModel):
+    """Request schema for admin device upgrade."""
+
+    user_id: int = Field(..., description="Device owner user ID")
+    force_stop_tasks: bool = Field(
+        False, description="Force stop running tasks before upgrade"
+    )
+
+
+class AdminDeviceRestartRequest(BaseModel):
+    """Request schema for admin device restart (cloud only)."""
+
+    user_id: int = Field(..., description="Device owner user ID")
+
+
+class AdminDeviceMigrateRequest(BaseModel):
+    """Request schema for admin device migration (cloud only)."""
+
+    user_id: int = Field(..., description="Device owner user ID")
+    target_host: Optional[str] = Field(
+        None, description="Target host for migration (future use)"
+    )
+
+
+class AdminDeviceActionResponse(BaseModel):
+    """Response schema for admin device actions."""
+
+    success: bool = Field(..., description="Whether the action was successful")
+    message: str = Field(..., description="Action result message")
 
 
 class AdminDeviceInfo(BaseModel):
@@ -400,3 +435,227 @@ async def get_device_stats(
     _STATS_CACHE["timestamp"] = now
 
     return result
+
+
+# ==================== Device Action Endpoints ====================
+
+
+async def _get_device_for_action(
+    db: Session, device_id: str, user_id: int
+) -> tuple[Kind, Dict[str, Any]]:
+    """Get device and validate it exists and is online.
+
+    Args:
+        db: Database session
+        device_id: Device unique identifier
+        user_id: Device owner user ID
+
+    Returns:
+        Tuple of (device Kind, online_info dict)
+
+    Raises:
+        HTTPException: If device not found, offline, or socket_id missing
+    """
+    # Get device from database
+    device_kind = device_service.get_device_by_device_id(db, user_id, device_id)
+    if not device_kind:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device not found: device_id={device_id}, user_id={user_id}",
+        )
+
+    # Get online info from Redis
+    online_info = await device_service.get_device_online_info(user_id, device_id)
+    if not online_info:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Device is offline",
+        )
+
+    if not online_info.get("socket_id"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Device socket information not found",
+        )
+
+    return device_kind, online_info
+
+
+@router.post(
+    "/devices/{device_id}/upgrade",
+    response_model=AdminDeviceActionResponse,
+)
+async def upgrade_device(
+    device_id: str = Path(..., description="Device unique identifier"),
+    request: AdminDeviceUpgradeRequest = ...,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(security.get_admin_user),
+):
+    """Trigger device upgrade for any user's device (admin only).
+
+    Args:
+        device_id: Device unique identifier
+        request: Upgrade request with user_id and options
+        db: Database session
+        current_user: Must be admin
+
+    Returns:
+        AdminDeviceActionResponse indicating success/failure
+    """
+    user_id = request.user_id
+
+    # Validate device exists and is online
+    device_kind, online_info = await _get_device_for_action(db, device_id, user_id)
+
+    # Check for running tasks
+    running_task_ids = online_info.get("running_task_ids", [])
+    if running_task_ids and not request.force_stop_tasks:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Device has {len(running_task_ids)} running task(s). "
+            f"Use force_stop_tasks=true to proceed.",
+        )
+
+    # Emit upgrade command via WebSocket
+    try:
+        from app.api.ws.device_namespace import device_namespace
+
+        socket_id = online_info["socket_id"]
+        upgrade_params = {
+            "force": False,
+            "auto_confirm": True,
+            "verbose": False,
+            "force_stop_tasks": request.force_stop_tasks,
+        }
+
+        success = await device_namespace.emit_upgrade_command(socket_id, upgrade_params)
+
+        if success:
+            logger.info(
+                f"[Admin Device Upgrade] Command sent: "
+                f"admin={current_user.user_name}, user_id={user_id}, device_id={device_id}"
+            )
+            return AdminDeviceActionResponse(
+                success=True, message="Upgrade command sent to device"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send upgrade command",
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(
+            f"[Admin Device Upgrade] Error: device_id={device_id}, error={e}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to trigger upgrade: {str(e)}",
+        )
+
+
+@router.post(
+    "/devices/{device_id}/restart",
+    response_model=AdminDeviceActionResponse,
+)
+async def restart_device(
+    device_id: str = Path(..., description="Device unique identifier"),
+    request: AdminDeviceRestartRequest = ...,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(security.get_admin_user),
+):
+    """Restart a cloud device (admin only). Currently not implemented.
+
+    Args:
+        device_id: Device unique identifier
+        request: Restart request with user_id
+        db: Database session
+        current_user: Must be admin
+
+    Returns:
+        AdminDeviceActionResponse indicating the feature is not implemented
+    """
+    user_id = request.user_id
+
+    # Validate device exists
+    device_kind = device_service.get_device_by_device_id(db, user_id, device_id)
+    if not device_kind:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device not found: device_id={device_id}, user_id={user_id}",
+        )
+
+    # Check device type - only cloud devices can be restarted
+    spec = device_kind.json.get("spec", {}) if device_kind.json else {}
+    device_type = spec.get("deviceType", DeviceType.LOCAL.value)
+    if device_type != DeviceType.CLOUD.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only cloud devices can be restarted",
+        )
+
+    logger.info(
+        f"[Admin Device Restart] Stub called: "
+        f"admin={current_user.user_name}, user_id={user_id}, device_id={device_id}"
+    )
+
+    # TODO: Implement actual restart logic for cloud devices
+    return AdminDeviceActionResponse(
+        success=False,
+        message="Device restart is not yet implemented. This feature will be available in a future release.",
+    )
+
+
+@router.post(
+    "/devices/{device_id}/migrate",
+    response_model=AdminDeviceActionResponse,
+)
+async def migrate_device(
+    device_id: str = Path(..., description="Device unique identifier"),
+    request: AdminDeviceMigrateRequest = ...,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(security.get_admin_user),
+):
+    """Migrate a cloud device to another host (admin only). Currently not implemented.
+
+    Args:
+        device_id: Device unique identifier
+        request: Migrate request with user_id and optional target_host
+        db: Database session
+        current_user: Must be admin
+
+    Returns:
+        AdminDeviceActionResponse indicating the feature is not implemented
+    """
+    user_id = request.user_id
+
+    # Validate device exists
+    device_kind = device_service.get_device_by_device_id(db, user_id, device_id)
+    if not device_kind:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device not found: device_id={device_id}, user_id={user_id}",
+        )
+
+    # Check device type - only cloud devices can be migrated
+    spec = device_kind.json.get("spec", {}) if device_kind.json else {}
+    device_type = spec.get("deviceType", DeviceType.LOCAL.value)
+    if device_type != DeviceType.CLOUD.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only cloud devices can be migrated",
+        )
+
+    logger.info(
+        f"[Admin Device Migrate] Stub called: "
+        f"admin={current_user.user_name}, user_id={user_id}, device_id={device_id}, "
+        f"target_host={request.target_host}"
+    )
+
+    # TODO: Implement actual migration logic for cloud devices
+    return AdminDeviceActionResponse(
+        success=False,
+        message="Device migration is not yet implemented. This feature will be available in a future release.",
+    )

@@ -444,6 +444,12 @@ export interface AdminDeviceStats {
   by_bind_shell: Record<string, number>
 }
 
+// Admin Device Action Types
+export interface AdminDeviceActionResponse {
+  success: boolean
+  message: string
+}
+
 // Admin API Services
 export const adminApis = {
   // ==================== User Management ====================
@@ -976,5 +982,42 @@ export const adminApis = {
    */
   async getDeviceStats(): Promise<AdminDeviceStats> {
     return apiClient.get('/admin/device-monitor/stats')
+  },
+
+  /**
+   * Upgrade a device (admin only)
+   */
+  async upgradeDevice(
+    deviceId: string,
+    userId: number,
+    forceStopTasks: boolean = false
+  ): Promise<AdminDeviceActionResponse> {
+    return apiClient.post(`/admin/device-monitor/devices/${encodeURIComponent(deviceId)}/upgrade`, {
+      user_id: userId,
+      force_stop_tasks: forceStopTasks,
+    })
+  },
+
+  /**
+   * Restart a cloud device (admin only)
+   */
+  async restartDevice(deviceId: string, userId: number): Promise<AdminDeviceActionResponse> {
+    return apiClient.post(`/admin/device-monitor/devices/${encodeURIComponent(deviceId)}/restart`, {
+      user_id: userId,
+    })
+  },
+
+  /**
+   * Migrate a cloud device (admin only)
+   */
+  async migrateDevice(
+    deviceId: string,
+    userId: number,
+    targetHost?: string
+  ): Promise<AdminDeviceActionResponse> {
+    return apiClient.post(`/admin/device-monitor/devices/${encodeURIComponent(deviceId)}/migrate`, {
+      user_id: userId,
+      target_host: targetHost,
+    })
   },
 }
