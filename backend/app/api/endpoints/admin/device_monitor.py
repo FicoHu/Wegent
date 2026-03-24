@@ -6,11 +6,11 @@
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
@@ -73,59 +73,75 @@ class AdminDeviceStats(BaseModel):
     )
 
 
-def _filter_devices(
-    device_kinds: List[Kind],
+def _build_device_query(
+    db: Session,
     device_type: Optional[str],
     bind_shell: Optional[str],
     search: Optional[str],
-    users_map: Dict[int, str],
-) -> List[Kind]:
-    """Filter devices by type, shell and search term.
+    search_user_ids: Optional[List[int]] = None,
+):
+    """Build optimized query with SQL-level JSON filtering.
 
     Args:
-        device_kinds: List of device Kind objects
+        db: Database session
         device_type: Filter by device type (local/cloud)
         bind_shell: Filter by bind shell (claudecode/openclaw)
-        search: Search by device name, ID or username
-        users_map: Map of user_id to user_name
+        search: Search by device name or device ID
+        search_user_ids: User IDs matching the search term (for username search)
 
     Returns:
-        Filtered list of device Kind objects
+        SQLAlchemy query object
     """
-    if not device_type and not bind_shell and not search:
-        return device_kinds
+    query = db.query(Kind).filter(
+        and_(
+            Kind.kind == "Device",
+            Kind.namespace == "default",
+            Kind.is_active == True,
+        )
+    )
 
-    filtered = []
-    search_lower = search.lower() if search else None
+    # Filter by device type using JSON_EXTRACT with COALESCE for default value
+    if device_type:
+        query = query.filter(
+            func.coalesce(
+                func.json_unquote(func.json_extract(Kind.json, "$.spec.deviceType")),
+                DeviceType.LOCAL.value,
+            )
+            == device_type
+        )
 
-    for kind in device_kinds:
-        spec = kind.json.get("spec", {}) if kind.json else {}
-        device_type_val = spec.get("deviceType", DeviceType.LOCAL.value)
-        bind_shell_val = spec.get("bindShell", BindShell.CLAUDECODE.value)
-        device_id = spec.get("deviceId", kind.name)
-        name = spec.get("displayName", kind.name)
-        user_name = users_map.get(kind.user_id, "")
+    # Filter by bind shell using JSON_EXTRACT with COALESCE for default value
+    if bind_shell:
+        query = query.filter(
+            func.coalesce(
+                func.json_unquote(func.json_extract(Kind.json, "$.spec.bindShell")),
+                BindShell.CLAUDECODE.value,
+            )
+            == bind_shell
+        )
 
-        # Filter by device type
-        if device_type and device_type_val != device_type:
-            continue
+    # Search filter: device name, device ID, or username
+    if search:
+        search_pattern = f"%{search}%"
+        search_conditions = [
+            # Search by displayName (with fallback to name column)
+            func.coalesce(
+                func.json_unquote(func.json_extract(Kind.json, "$.spec.displayName")),
+                Kind.name,
+            ).ilike(search_pattern),
+            # Search by deviceId (with fallback to name column)
+            func.coalesce(
+                func.json_unquote(func.json_extract(Kind.json, "$.spec.deviceId")),
+                Kind.name,
+            ).ilike(search_pattern),
+        ]
+        # Add user_id filter if there are matching users
+        if search_user_ids:
+            search_conditions.append(Kind.user_id.in_(search_user_ids))
 
-        # Filter by bind shell
-        if bind_shell and bind_shell_val != bind_shell:
-            continue
+        query = query.filter(or_(*search_conditions))
 
-        # Filter by search term
-        if search_lower:
-            if (
-                search_lower not in name.lower()
-                and search_lower not in device_id.lower()
-                and search_lower not in user_name.lower()
-            ):
-                continue
-
-        filtered.append(kind)
-
-    return filtered
+    return query
 
 
 async def _get_devices_redis_status(
@@ -213,9 +229,9 @@ async def get_all_devices(
 ):
     """Get all devices across all users for admin monitoring (optimized).
 
-    This endpoint uses the following optimization strategies:
-    1. Loads all devices from database (necessary for json field filtering)
-    2. Applies filters in memory (device_type, bind_shell, search)
+    This endpoint uses SQL-level JSON filtering for better performance:
+    1. Filters device_type and bind_shell using MySQL JSON_EXTRACT
+    2. Search uses SQL LIKE on JSON fields plus user_id lookup
     3. Only queries Redis for the current page devices (batch mget)
 
     Note: Status filter is removed for performance. Status is displayed
@@ -233,34 +249,28 @@ async def get_all_devices(
     Returns:
         AdminDeviceListResponse with paginated devices
     """
-    # Step 1: Get all Device CRDs from database
-    # Note: We need to load all for json filtering, but only select necessary columns
-    query = db.query(Kind).filter(
-        and_(
-            Kind.kind == "Device",
-            Kind.namespace == "default",
-            Kind.is_active == True,
+    # Step 1: If search term provided, find matching user IDs first
+    search_user_ids: Optional[List[int]] = None
+    if search:
+        matching_users = (
+            db.query(User.id).filter(User.user_name.ilike(f"%{search}%")).all()
         )
-    )
-    all_device_kinds = query.all()
+        search_user_ids = [u.id for u in matching_users] if matching_users else []
 
-    # Step 2: Build user map for all devices (needed for search filter)
-    user_ids = list({d.user_id for d in all_device_kinds})
+    # Step 2: Build optimized query with SQL-level filtering
+    query = _build_device_query(db, device_type, bind_shell, search, search_user_ids)
+
+    # Step 3: Get total count and paginated results
+    total = query.count()
+    offset = (page - 1) * limit
+    page_kinds = query.offset(offset).limit(limit).all()
+
+    # Step 4: Build user map only for current page (not all devices)
+    page_user_ids = list({d.user_id for d in page_kinds})
     users_map: Dict[int, str] = {}
-    if user_ids:
-        users = db.query(User).filter(User.id.in_(user_ids)).all()
+    if page_user_ids:
+        users = db.query(User).filter(User.id.in_(page_user_ids)).all()
         users_map = {u.id: u.user_name for u in users}
-
-    # Step 3: Apply filters (device_type, bind_shell, search) in memory
-    filtered_kinds = _filter_devices(
-        all_device_kinds, device_type, bind_shell, search, users_map
-    )
-
-    # Step 4: Calculate pagination
-    total = len(filtered_kinds)
-    start = (page - 1) * limit
-    end = start + limit
-    page_kinds = filtered_kinds[start:end]
 
     # Step 5: Get Redis status for current page only (batch query)
     online_info_map = await _get_devices_redis_status(page_kinds)
