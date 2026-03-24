@@ -5,7 +5,8 @@
 """Admin device monitor endpoints for viewing all user devices."""
 
 import logging
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -14,14 +15,18 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db
 from app.core import security
+from app.core.cache import cache_manager
 from app.models.kind import Kind
 from app.models.user import User
 from app.schemas.device import BindShell, DeviceStatusEnum, DeviceType
-from app.services.device.provider_factory import DeviceProviderFactory
+from app.services.device.local_provider import local_device_provider
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/device-monitor")
+
+# Stats cache configuration
+_STATS_CACHE = {"data": None, "timestamp": 0, "ttl": 30}  # 30 seconds cache
 
 
 class AdminDeviceInfo(BaseModel):
@@ -68,19 +73,170 @@ class AdminDeviceStats(BaseModel):
     )
 
 
+def _filter_devices(
+    device_kinds: List[Kind],
+    device_type: Optional[str],
+    bind_shell: Optional[str],
+    search: Optional[str],
+    users_map: Dict[int, str],
+) -> List[Kind]:
+    """Filter devices by type, shell and search term.
+
+    Args:
+        device_kinds: List of device Kind objects
+        device_type: Filter by device type (local/cloud)
+        bind_shell: Filter by bind shell (claudecode/openclaw)
+        search: Search by device name, ID or username
+        users_map: Map of user_id to user_name
+
+    Returns:
+        Filtered list of device Kind objects
+    """
+    if not device_type and not bind_shell and not search:
+        return device_kinds
+
+    filtered = []
+    search_lower = search.lower() if search else None
+
+    for kind in device_kinds:
+        spec = kind.json.get("spec", {}) if kind.json else {}
+        device_type_val = spec.get("deviceType", DeviceType.LOCAL.value)
+        bind_shell_val = spec.get("bindShell", BindShell.CLAUDECODE.value)
+        device_id = spec.get("deviceId", kind.name)
+        name = spec.get("displayName", kind.name)
+        user_name = users_map.get(kind.user_id, "")
+
+        # Filter by device type
+        if device_type and device_type_val != device_type:
+            continue
+
+        # Filter by bind shell
+        if bind_shell and bind_shell_val != bind_shell:
+            continue
+
+        # Filter by search term
+        if search_lower:
+            if (
+                search_lower not in name.lower()
+                and search_lower not in device_id.lower()
+                and search_lower not in user_name.lower()
+            ):
+                continue
+
+        filtered.append(kind)
+
+    return filtered
+
+
+def _apply_status_filter(
+    devices: List[AdminDeviceInfo],
+    status: Optional[str],
+) -> List[AdminDeviceInfo]:
+    """Apply status filter to device list.
+
+    Args:
+        devices: List of AdminDeviceInfo objects
+        status: Filter by status (online/offline/busy)
+
+    Returns:
+        Filtered list of AdminDeviceInfo objects
+    """
+    if not status:
+        return devices
+    return [d for d in devices if d.status == status]
+
+
+async def _get_devices_redis_status(
+    device_kinds: List[Kind],
+) -> Dict[str, Any]:
+    """Get Redis status for devices in batch.
+
+    Args:
+        device_kinds: List of device Kind objects
+
+    Returns:
+        Dict mapping Redis keys to device status info
+    """
+    if not device_kinds:
+        return {}
+
+    # Build Redis keys for all devices
+    redis_keys = []
+    for kind in device_kinds:
+        spec = kind.json.get("spec", {}) if kind.json else {}
+        device_id = spec.get("deviceId", kind.name)
+        redis_key = local_device_provider.generate_online_key(kind.user_id, device_id)
+        redis_keys.append(redis_key)
+
+    # Batch get all Redis status (single round-trip)
+    return await cache_manager.mget(redis_keys)
+
+
+def _build_device_info(
+    kind: Kind,
+    users_map: Dict[int, str],
+    online_info: Optional[Dict[str, Any]],
+) -> AdminDeviceInfo:
+    """Build AdminDeviceInfo from Kind and Redis status.
+
+    Args:
+        kind: Device Kind object
+        users_map: Map of user_id to user_name
+        online_info: Redis status info or None
+
+    Returns:
+        AdminDeviceInfo object
+    """
+    spec = kind.json.get("spec", {}) if kind.json else {}
+    device_id = spec.get("deviceId", kind.name)
+
+    # Determine status from Redis
+    if online_info:
+        status_val = online_info.get("status", DeviceStatusEnum.ONLINE.value)
+        executor_version = online_info.get("executor_version")
+        running_task_ids = online_info.get("running_task_ids", [])
+        slot_used = len(running_task_ids)
+    else:
+        status_val = DeviceStatusEnum.OFFLINE.value
+        executor_version = None
+        slot_used = 0
+
+    return AdminDeviceInfo(
+        id=kind.id,
+        device_id=device_id,
+        name=spec.get("displayName", device_id),
+        status=status_val,
+        device_type=spec.get("deviceType", DeviceType.LOCAL.value),
+        bind_shell=spec.get("bindShell", BindShell.CLAUDECODE.value),
+        user_id=kind.user_id,
+        user_name=users_map.get(kind.user_id, "Unknown"),
+        client_ip=spec.get("clientIp"),
+        executor_version=executor_version,
+        slot_used=slot_used,
+        slot_max=5,  # MAX_DEVICE_SLOTS default
+    )
+
+
 @router.get("/devices", response_model=AdminDeviceListResponse)
 async def get_all_devices(
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(50, ge=1, le=100, description="Items per page"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
     status: Optional[str] = Query(None, description="Filter by status"),
     device_type: Optional[str] = Query(None, description="Filter by device type"),
     bind_shell: Optional[str] = Query(None, description="Filter by bind shell"),
-    search: Optional[str] = Query(None, description="Search by device name or ID"),
+    search: Optional[str] = Query(
+        None, description="Search by device name, ID or username"
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(security.get_admin_user),
 ):
-    """
-    Get all devices across all users for admin monitoring.
+    """Get all devices across all users for admin monitoring (optimized).
+
+    This endpoint uses the following optimization strategies:
+    1. Loads all devices from database (necessary for json field filtering)
+    2. Applies filters in memory (device_type, bind_shell, search)
+    3. Only queries Redis for the current page devices (batch mget)
+    4. Applies status filter after getting Redis data
 
     Args:
         page: Page number (1-indexed)
@@ -88,14 +244,15 @@ async def get_all_devices(
         status: Filter by device status (online/offline/busy)
         device_type: Filter by device type (local/cloud)
         bind_shell: Filter by bind shell (claudecode/openclaw)
-        search: Search by device name or device ID
+        search: Search by device name, device ID or username
         db: Database session
         current_user: Must be admin
 
     Returns:
-        AdminDeviceListResponse with all devices matching filters
+        AdminDeviceListResponse with paginated devices
     """
-    # Get all Device CRDs from the database
+    # Step 1: Get all Device CRDs from database
+    # Note: We need to load all for json filtering, but only select necessary columns
     query = db.query(Kind).filter(
         and_(
             Kind.kind == "Device",
@@ -103,100 +260,50 @@ async def get_all_devices(
             Kind.is_active == True,
         )
     )
+    all_device_kinds = query.all()
 
-    # Get all devices with user info
-    device_kinds = query.all()
-
-    # Build user ID to username map
-    user_ids = list({d.user_id for d in device_kinds})
+    # Step 2: Build user map for all devices (needed for search filter)
+    user_ids = list({d.user_id for d in all_device_kinds})
     users_map: Dict[int, str] = {}
     if user_ids:
         users = db.query(User).filter(User.id.in_(user_ids)).all()
         users_map = {u.id: u.user_name for u in users}
 
-    # Get online status for all devices from Redis
-    all_devices: List[Dict[str, Any]] = []
-    for device_kind in device_kinds:
-        spec = device_kind.json.get("spec", {})
-        device_id = spec.get("deviceId", device_kind.name)
-        device_type_val = spec.get("deviceType", DeviceType.LOCAL.value)
-        bind_shell_val = spec.get("bindShell", BindShell.CLAUDECODE.value)
+    # Step 3: Apply filters (device_type, bind_shell, search) in memory
+    filtered_kinds = _filter_devices(
+        all_device_kinds, device_type, bind_shell, search, users_map
+    )
 
-        # Get device provider and online status
-        try:
-            provider_type = DeviceType(device_type_val)
-            provider = DeviceProviderFactory.get_provider(provider_type)
-            if provider:
-                device_status = await provider.get_status(
-                    db, device_kind.user_id, device_id
-                )
-                status_val = device_status.get("status", DeviceStatusEnum.OFFLINE.value)
-                executor_version = device_status.get("executor_version")
-                slot_used = device_status.get("slot_used", 0)
-                slot_max = device_status.get("slot_max", 0)
-            else:
-                status_val = DeviceStatusEnum.OFFLINE.value
-                executor_version = None
-                slot_used = 0
-                slot_max = 0
-        except Exception:
-            status_val = DeviceStatusEnum.OFFLINE.value
-            executor_version = None
-            slot_used = 0
-            slot_max = 0
-
-        device_info = {
-            "id": device_kind.id,
-            "device_id": device_id,
-            "name": spec.get("displayName", device_kind.name),
-            "status": status_val,
-            "device_type": device_type_val,
-            "bind_shell": bind_shell_val,
-            "user_id": device_kind.user_id,
-            "user_name": users_map.get(device_kind.user_id, "Unknown"),
-            "client_ip": spec.get("clientIp"),
-            "executor_version": executor_version,
-            "slot_used": slot_used,
-            "slot_max": slot_max,
-        }
-        all_devices.append(device_info)
-
-    # Apply filters
-    filtered_devices = all_devices
-
-    if status:
-        filtered_devices = [d for d in filtered_devices if d["status"] == status]
-
-    if device_type:
-        filtered_devices = [
-            d for d in filtered_devices if d["device_type"] == device_type
-        ]
-
-    if bind_shell:
-        filtered_devices = [
-            d for d in filtered_devices if d["bind_shell"] == bind_shell
-        ]
-
-    if search:
-        search_lower = search.lower()
-        filtered_devices = [
-            d
-            for d in filtered_devices
-            if search_lower in d["name"].lower()
-            or search_lower in d["device_id"].lower()
-            or search_lower in d["user_name"].lower()
-        ]
-
-    # Pagination
-    total = len(filtered_devices)
+    # Step 4: Calculate pagination
+    total = len(filtered_kinds)
     start = (page - 1) * limit
     end = start + limit
-    paginated_devices = filtered_devices[start:end]
+    page_kinds = filtered_kinds[start:end]
 
-    return AdminDeviceListResponse(
-        items=[AdminDeviceInfo(**d) for d in paginated_devices],
-        total=total,
-    )
+    # Step 5: Get Redis status for current page only (batch query)
+    online_info_map = await _get_devices_redis_status(page_kinds)
+
+    # Step 6: Build device info and apply status filter
+    items = []
+    for kind in page_kinds:
+        spec = kind.json.get("spec", {}) if kind.json else {}
+        device_id = spec.get("deviceId", kind.name)
+        redis_key = local_device_provider.generate_online_key(kind.user_id, device_id)
+        online_info = online_info_map.get(redis_key)
+
+        device_info = _build_device_info(kind, users_map, online_info)
+
+        # Apply status filter
+        if status and device_info.status != status:
+            continue
+
+        items.append(device_info)
+
+    # Note: If status filter removed items from this page, the page may have fewer items.
+    # This is acceptable for admin monitoring UI. For exact pagination with status filter,
+    # we would need to query all Redis status first, which defeats the optimization.
+
+    return AdminDeviceListResponse(items=items, total=total)
 
 
 @router.get("/stats", response_model=AdminDeviceStats)
@@ -204,8 +311,9 @@ async def get_device_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(security.get_admin_user),
 ):
-    """
-    Get device statistics for admin monitoring.
+    """Get device statistics for admin monitoring (with caching).
+
+    Uses a 30-second in-memory cache to reduce Redis load for frequent requests.
 
     Args:
         db: Database session
@@ -214,6 +322,14 @@ async def get_device_stats(
     Returns:
         AdminDeviceStats with counts by status, type, and shell
     """
+    global _STATS_CACHE
+
+    # Check cache
+    now = time.time()
+    if _STATS_CACHE["data"] and (now - _STATS_CACHE["timestamp"]) < _STATS_CACHE["ttl"]:
+        logger.debug("Returning cached device stats")
+        return _STATS_CACHE["data"]
+
     # Get all Device CRDs
     device_kinds = (
         db.query(Kind)
@@ -245,43 +361,55 @@ async def get_device_stats(
     # Count unique users with devices
     user_ids = {d.user_id for d in device_kinds}
 
-    # Count devices
-    for device_kind in device_kinds:
-        spec = device_kind.json.get("spec", {})
-        device_id = spec.get("deviceId", device_kind.name)
+    # Build Redis keys for all devices and collect static data
+    redis_keys = []
+    device_metadata = []
+
+    for kind in device_kinds:
+        spec = kind.json.get("spec", {}) if kind.json else {}
+        device_id = spec.get("deviceId", kind.name)
         device_type_val = spec.get("deviceType", DeviceType.LOCAL.value)
         bind_shell_val = spec.get("bindShell", BindShell.CLAUDECODE.value)
 
-        # Count by device type
+        # Count by device type (static data)
         if device_type_val in by_device_type:
             by_device_type[device_type_val] += 1
 
-        # Count by bind shell
+        # Count by bind shell (static data)
         if bind_shell_val in by_bind_shell:
             by_bind_shell[bind_shell_val] += 1
 
-        # Get online status
-        try:
-            provider_type = DeviceType(device_type_val)
-            provider = DeviceProviderFactory.get_provider(provider_type)
-            if provider:
-                device_status = await provider.get_status(
-                    db, device_kind.user_id, device_id
-                )
-                status_val = device_status.get("status", DeviceStatusEnum.OFFLINE.value)
-            else:
-                status_val = DeviceStatusEnum.OFFLINE.value
-        except Exception:
+        # Prepare for Redis batch query
+        redis_key = local_device_provider.generate_online_key(kind.user_id, device_id)
+        redis_keys.append(redis_key)
+        device_metadata.append({"type": device_type_val, "shell": bind_shell_val})
+
+    # Batch get all Redis status (single round-trip for all devices)
+    online_info_map = await cache_manager.mget(redis_keys)
+
+    # Count by status
+    for i, _ in enumerate(device_metadata):
+        redis_key = redis_keys[i]
+        online_info = online_info_map.get(redis_key)
+
+        if online_info:
+            status_val = online_info.get("status", DeviceStatusEnum.ONLINE.value)
+        else:
             status_val = DeviceStatusEnum.OFFLINE.value
 
-        # Count by status
         if status_val in by_status:
             by_status[status_val] += 1
 
-    return AdminDeviceStats(
+    result = AdminDeviceStats(
         total=len(device_kinds),
         user_count=len(user_ids),
         by_status=by_status,
         by_device_type=by_device_type,
         by_bind_shell=by_bind_shell,
     )
+
+    # Update cache
+    _STATS_CACHE["data"] = result
+    _STATS_CACHE["timestamp"] = now
+
+    return result
