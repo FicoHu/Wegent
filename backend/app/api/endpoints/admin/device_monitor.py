@@ -43,6 +43,7 @@ class AdminDeviceInfo(BaseModel):
     executor_version: Optional[str] = Field(None, description="Executor version")
     slot_used: int = Field(0, description="Number of slots in use")
     slot_max: int = Field(0, description="Maximum slots")
+    created_at: Optional[str] = Field(None, description="Device creation timestamp")
 
 
 class AdminDeviceListResponse(BaseModel):
@@ -158,6 +159,9 @@ async def get_all_devices(
             "executor_version": executor_version,
             "slot_used": slot_used,
             "slot_max": slot_max,
+            "created_at": (
+                device_kind.created_at.isoformat() if device_kind.created_at else None
+            ),
         }
         all_devices.append(device_info)
 

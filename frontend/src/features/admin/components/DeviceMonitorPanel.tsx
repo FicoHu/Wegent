@@ -330,6 +330,12 @@ export function DeviceMonitorPanel() {
                       <span>
                         {t('admin:device_monitor.columns.user')}: {device.user_name}
                       </span>
+                      {device.created_at && (
+                        <span>
+                          {t('admin:device_monitor.columns.created_at')}:{' '}
+                          {new Date(device.created_at).toLocaleString()}
+                        </span>
+                      )}
                       {device.executor_version && (
                         <span>
                           {t('admin:device_monitor.columns.version')}: {device.executor_version}
