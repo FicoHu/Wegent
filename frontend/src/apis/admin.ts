@@ -430,6 +430,7 @@ export interface AdminDeviceInfo {
   slot_used: number
   slot_max: number
   created_at: string | null
+  updated_at: string | null
 }
 
 export interface AdminDeviceListResponse {

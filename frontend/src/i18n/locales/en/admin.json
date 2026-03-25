@@ -838,7 +838,8 @@
       "user": "Owner",
       "version": "Version",
       "ip": "IP Address",
-      "created_at": "Created At"
+      "created_at": "Created At",
+      "updated_at": "Updated At"
     },
     "errors": {
       "load_failed": "Failed to load device list",

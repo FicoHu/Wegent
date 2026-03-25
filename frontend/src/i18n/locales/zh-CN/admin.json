@@ -838,7 +838,8 @@
       "user": "所属用户",
       "version": "版本",
       "ip": "IP 地址",
-      "created_at": "创建时间"
+      "created_at": "创建时间",
+      "updated_at": "更新时间"
     },
     "errors": {
       "load_failed": "加载设备列表失败",

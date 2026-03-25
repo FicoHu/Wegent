@@ -431,6 +431,12 @@ export function DeviceMonitorPanel() {
                             {new Date(device.created_at).toLocaleString()}
                           </span>
                         )}
+                        {device.updated_at && (
+                          <span>
+                            {t('admin:device_monitor.columns.updated_at')}:{' '}
+                            {new Date(device.updated_at).toLocaleString()}
+                          </span>
+                        )}
                       </div>
                     </div>
                     {/* Action Buttons */}
