@@ -43,6 +43,7 @@ celery_app = Celery(
     include=[
         "app.tasks.subscription_tasks",
         "app.tasks.knowledge_tasks",
+        "app.tasks.archive_tasks",
     ],
 )
 
@@ -72,6 +73,12 @@ celery_app.conf.update(
         "check-due-subscriptions": {
             "task": "app.tasks.subscription_tasks.check_due_subscriptions",
             "schedule": float(settings.FLOW_SCHEDULER_INTERVAL_SECONDS),
+        },
+        # Cleanup expired workspace archives daily at 3:00 AM UTC
+        "cleanup-expired-archives": {
+            "task": "app.tasks.archive_tasks.cleanup_expired_archives",
+            "schedule": 86400.0,  # 24 hours in seconds
+            "options": {"queue": settings.CELERY_TASK_DEFAULT_QUEUE},
         },
     },
     # Beat scheduler class - Use default PersistentScheduler (file-based)

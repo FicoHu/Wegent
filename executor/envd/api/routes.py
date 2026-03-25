@@ -6,20 +6,50 @@ REST API route handlers for envd
 """
 
 import os
+import shutil
+import tarfile
+import tempfile
 import time
+from pathlib import Path
 from typing import Optional
 
+import httpx
 import psutil
 from fastapi import FastAPI, File, Header, HTTPException, Query, Response, UploadFile
 from fastapi.responses import FileResponse
 
 from shared.logger import setup_logger
 
-from .models import EntryInfo, InitRequest, MetricsResponse
+from .models import (
+    ArchiveRequest,
+    ArchiveResponse,
+    EntryInfo,
+    InitRequest,
+    MetricsResponse,
+    RestoreRequest,
+    RestoreResponse,
+)
 from .state import AccessTokenAlreadySetError, get_state_manager
 from .utils import resolve_path, verify_access_token, verify_signature
 
 logger = setup_logger("envd_api_routes")
+
+# Exclusion patterns for workspace archive
+ARCHIVE_EXCLUDE_PATTERNS = [
+    "node_modules",
+    "__pycache__",
+    "*.pyc",
+    ".venv",
+    "venv",
+    "target",
+    "build",
+    "dist",
+    "*.log",
+    ".next",
+    ".nuxt",
+    "vendor",
+    ".cache",
+]
 
 
 def register_rest_api(app: FastAPI):
@@ -187,6 +217,219 @@ def register_rest_api(app: FastAPI):
             logger.exception(f"Error uploading file: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
+    @app.post("/api/archive", response_model=ArchiveResponse)
+    async def archive_workspace(
+        request: ArchiveRequest,
+        x_access_token: Optional[str] = Header(None),
+    ):
+        """Archive workspace files for Pod recovery.
+
+        Packages workspace directory into a tarball and uploads directly to MinIO
+        using the presigned URL. Excludes large directories like node_modules.
+
+        Includes:
+        - .claude_session_id* (Claude Code session files)
+        - .claude/ (Claude config)
+        - .git/ (Git history)
+        - Source code files
+        - .cursorrules, .windsurfrules
+
+        Excludes:
+        - node_modules/, __pycache__/, .venv/, venv/
+        - target/, build/, dist/
+        - *.log files
+        """
+        verify_access_token(x_access_token)
+
+        task_id = request.task_id
+        upload_url = request.upload_url
+        max_size_bytes = request.max_size_mb * 1024 * 1024
+
+        logger.info(f"[archive] Starting archive for task {task_id}")
+
+        # Workspace path
+        workspace_path = Path(f"/workspace/{task_id}")
+        if not workspace_path.exists():
+            logger.warning(f"[archive] Workspace not found: {workspace_path}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Workspace not found: {workspace_path}",
+            )
+
+        try:
+            # Create temp file for archive
+            with tempfile.NamedTemporaryFile(
+                suffix=".tar.gz", delete=False
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+
+            try:
+                # Track what was included
+                session_file_included = False
+                git_included = False
+
+                # Create tarball with exclusions
+                def should_exclude(name: str) -> bool:
+                    """Check if file/dir should be excluded."""
+                    for pattern in ARCHIVE_EXCLUDE_PATTERNS:
+                        if pattern.startswith("*"):
+                            if name.endswith(pattern[1:]):
+                                return True
+                        elif pattern in name.split(os.sep):
+                            return True
+                    return False
+
+                with tarfile.open(tmp_path, "w:gz") as tar:
+                    for item in workspace_path.iterdir():
+                        if should_exclude(item.name):
+                            logger.debug(f"[archive] Excluding: {item.name}")
+                            continue
+
+                        # Track session and git files
+                        if item.name.startswith(".claude_session_id"):
+                            session_file_included = True
+                        if item.name == ".git":
+                            git_included = True
+
+                        # Add to archive
+                        tar.add(str(item), arcname=item.name)
+                        logger.debug(f"[archive] Added: {item.name}")
+
+                # Check size
+                archive_size = os.path.getsize(tmp_path)
+                logger.info(
+                    f"[archive] Archive size: {archive_size} bytes "
+                    f"(max: {max_size_bytes} bytes)"
+                )
+
+                if archive_size > max_size_bytes:
+                    logger.warning(
+                        f"[archive] Archive exceeds size limit: "
+                        f"{archive_size} > {max_size_bytes}"
+                    )
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Archive size {archive_size} exceeds limit {max_size_bytes}",
+                    )
+
+                # Upload to MinIO using presigned URL
+                logger.info(f"[archive] Uploading archive to MinIO")
+                with open(tmp_path, "rb") as f:
+                    async with httpx.AsyncClient(timeout=120.0) as client:
+                        response = await client.put(
+                            upload_url,
+                            content=f.read(),
+                            headers={"Content-Type": "application/gzip"},
+                        )
+                        response.raise_for_status()
+
+                logger.info(
+                    f"[archive] Successfully archived task {task_id}, "
+                    f"size={archive_size} bytes, "
+                    f"session_included={session_file_included}, "
+                    f"git_included={git_included}"
+                )
+
+                return ArchiveResponse(
+                    task_id=task_id,
+                    size_bytes=archive_size,
+                    session_file_included=session_file_included,
+                    git_included=git_included,
+                )
+
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception(f"[archive] Error archiving workspace: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @app.post("/api/restore", response_model=RestoreResponse)
+    async def restore_workspace(
+        request: RestoreRequest,
+        x_access_token: Optional[str] = Header(None),
+    ):
+        """Restore workspace files from archive.
+
+        Downloads archive from MinIO using the presigned URL and extracts
+        to workspace directory, restoring the state before Pod deletion.
+        """
+        verify_access_token(x_access_token)
+
+        task_id = request.task_id
+        download_url = request.download_url
+
+        logger.info(f"[restore] Starting restore for task {task_id}")
+
+        # Workspace path
+        workspace_path = Path(f"/workspace/{task_id}")
+
+        try:
+            # Download archive from MinIO
+            logger.info(f"[restore] Downloading archive from MinIO")
+
+            with tempfile.NamedTemporaryFile(
+                suffix=".tar.gz", delete=False
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    response = await client.get(download_url)
+                    response.raise_for_status()
+
+                    with open(tmp_path, "wb") as f:
+                        f.write(response.content)
+
+                archive_size = os.path.getsize(tmp_path)
+                logger.info(f"[restore] Downloaded archive: {archive_size} bytes")
+
+                # Ensure workspace directory exists
+                workspace_path.mkdir(parents=True, exist_ok=True)
+
+                # Track what was restored
+                session_restored = False
+                git_restored = False
+
+                # Extract archive
+                with tarfile.open(tmp_path, "r:gz") as tar:
+                    # Get member names for tracking
+                    for member in tar.getnames():
+                        if member.startswith(".claude_session_id"):
+                            session_restored = True
+                        if member == ".git" or member.startswith(".git/"):
+                            git_restored = True
+
+                    # Extract all
+                    tar.extractall(path=str(workspace_path))
+
+                logger.info(
+                    f"[restore] Successfully restored task {task_id}, "
+                    f"session_restored={session_restored}, "
+                    f"git_restored={git_restored}"
+                )
+
+                return RestoreResponse(
+                    success=True,
+                    session_restored=session_restored,
+                    git_restored=git_restored,
+                )
+
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception(f"[restore] Error restoring workspace: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     logger.info("Registered envd REST API routes:")
     logger.info("  GET /health")
     logger.info("  GET /metrics")
@@ -194,3 +437,5 @@ def register_rest_api(app: FastAPI):
     logger.info("  GET /envs")
     logger.info("  GET /files")
     logger.info("  POST /files")
+    logger.info("  POST /api/archive")
+    logger.info("  POST /api/restore")
