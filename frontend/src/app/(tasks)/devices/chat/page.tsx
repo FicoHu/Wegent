@@ -243,9 +243,11 @@ export default function DeviceChatPage() {
                 ? t('device_deleted_hint')
                 : hasMessages && taskDevice?.status === 'offline'
                   ? t('device_offline_cannot_send')
-                  : !selectedDevice || selectedDevice.status === 'offline'
-                    ? t('device_offline_cannot_send')
-                    : undefined
+                  : hasMessages && !selectedTaskDetail?.device_id
+                    ? undefined // Task was created with cloud mode, allow sending
+                    : !selectedDevice || selectedDevice.status === 'offline'
+                      ? t('device_offline_cannot_send')
+                      : undefined
             }
             hideSelectors={isOpenClaw}
           />
