@@ -123,6 +123,13 @@ export default function DeviceChatPage() {
   // Get selected device info
   const selectedDevice = devices.find(d => d.device_id === selectedDeviceId)
 
+  // For existing tasks, use task's device_id instead of selectedDeviceId for display
+  const taskDevice = selectedTaskDetail?.device_id
+    ? devices.find(d => d.device_id === selectedTaskDetail.device_id)
+    : null
+  // Task is considered to have messages if it has a non-empty title and was created
+  const hasMessages = !!(selectedTaskDetail && selectedTaskDetail.id)
+
   // Check if selected device is OpenClaw type
   const isOpenClaw = selectedDevice ? isOpenClawDevice(selectedDevice) : false
 
@@ -172,26 +179,51 @@ export default function DeviceChatPage() {
           {!isTaskDeviceDeleted && (
             <div className="flex items-center gap-2 mr-2">
               <Monitor className="w-4 h-4 text-text-muted" />
-              <select
-                value={selectedDeviceId || ''}
-                onChange={e => handleDeviceSelect(e.target.value)}
-                className="bg-surface border border-border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                <option value="" disabled>
-                  {t('select_device')}
-                </option>
-                {devices.map(device => (
-                  <option key={device.device_id} value={device.device_id}>
-                    {device.name} (
-                    {device.status === 'online'
+              {/* For existing tasks with messages, show read-only device info */}
+              {hasMessages && taskDevice ? (
+                <div className="flex items-center gap-1.5 bg-surface border border-border rounded-md px-2 py-1 text-sm">
+                  <span className="truncate max-w-[150px]">{taskDevice.name}</span>
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      taskDevice.status === 'online'
+                        ? 'bg-green-500'
+                        : taskDevice.status === 'busy'
+                          ? 'bg-yellow-500'
+                          : 'bg-gray-400'
+                    }`}
+                  />
+                  <span className="text-text-muted text-xs">
+                    (
+                    {taskDevice.status === 'online'
                       ? t('status_online')
-                      : device.status === 'busy'
+                      : taskDevice.status === 'busy'
                         ? t('status_busy')
                         : t('status_offline')}
                     )
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={selectedDeviceId || ''}
+                  onChange={e => handleDeviceSelect(e.target.value)}
+                  className="bg-surface border border-border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="" disabled>
+                    {t('select_device')}
                   </option>
-                ))}
-              </select>
+                  {devices.map(device => (
+                    <option key={device.device_id} value={device.device_id}>
+                      {device.name} (
+                      {device.status === 'online'
+                        ? t('status_online')
+                        : device.status === 'busy'
+                          ? t('status_busy')
+                          : t('status_offline')}
+                      )
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
           {isMobile ? <ThemeToggle /> : <GithubStarButton />}
@@ -209,9 +241,11 @@ export default function DeviceChatPage() {
             disabledReason={
               isTaskDeviceDeleted
                 ? t('device_deleted_hint')
-                : !selectedDevice || selectedDevice.status === 'offline'
+                : hasMessages && taskDevice?.status === 'offline'
                   ? t('device_offline_cannot_send')
-                  : undefined
+                  : !selectedDevice || selectedDevice.status === 'offline'
+                    ? t('device_offline_cannot_send')
+                    : undefined
             }
             hideSelectors={isOpenClaw}
           />
