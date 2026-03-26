@@ -24,7 +24,7 @@ import { useTaskContext } from '@/features/tasks/contexts/taskContext'
 import { paths } from '@/config/paths'
 import { useDevices } from '@/contexts/DeviceContext'
 import { useTeamContext } from '@/contexts/TeamContext'
-import { Monitor, WifiOff, Trash2 } from 'lucide-react'
+import { Monitor, WifiOff } from 'lucide-react'
 import { ChatArea } from '@/features/tasks/components/chat'
 import { TaskParamSync, DeviceTaskSync, DeviceParamSync } from '@/features/tasks/components/params'
 import { isOpenClawDevice } from '@/features/devices/utils/device-status'
@@ -168,41 +168,32 @@ export default function DeviceChatPage() {
           onMembersChanged={handleMembersChanged}
           isSidebarCollapsed={isCollapsed}
         >
-          {/* Device selector in top bar */}
-          <div className="flex items-center gap-2 mr-2">
-            {isTaskDeviceDeleted ? (
-              <>
-                <Trash2 className="w-4 h-4 text-red-500" />
-                <div className="flex items-center gap-2 bg-red-50 border border-red-300 rounded-md px-2 py-1 text-sm text-red-600">
-                  {t('device_deleted')}
-                </div>
-              </>
-            ) : (
-              <>
-                <Monitor className="w-4 h-4 text-text-muted" />
-                <select
-                  value={selectedDeviceId || ''}
-                  onChange={e => handleDeviceSelect(e.target.value)}
-                  className="bg-surface border border-border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  <option value="" disabled>
-                    {t('select_device')}
+          {/* Device selector in top bar - hide when task's device is deleted */}
+          {!isTaskDeviceDeleted && (
+            <div className="flex items-center gap-2 mr-2">
+              <Monitor className="w-4 h-4 text-text-muted" />
+              <select
+                value={selectedDeviceId || ''}
+                onChange={e => handleDeviceSelect(e.target.value)}
+                className="bg-surface border border-border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="" disabled>
+                  {t('select_device')}
+                </option>
+                {devices.map(device => (
+                  <option key={device.device_id} value={device.device_id}>
+                    {device.name} (
+                    {device.status === 'online'
+                      ? t('status_online')
+                      : device.status === 'busy'
+                        ? t('status_busy')
+                        : t('status_offline')}
+                    )
                   </option>
-                  {devices.map(device => (
-                    <option key={device.device_id} value={device.device_id}>
-                      {device.name} (
-                      {device.status === 'online'
-                        ? t('status_online')
-                        : device.status === 'busy'
-                          ? t('status_busy')
-                          : t('status_offline')}
-                      )
-                    </option>
-                  ))}
-                </select>
-              </>
-            )}
-          </div>
+                ))}
+              </select>
+            </div>
+          )}
           {isMobile ? <ThemeToggle /> : <GithubStarButton />}
         </TopNavigation>
 

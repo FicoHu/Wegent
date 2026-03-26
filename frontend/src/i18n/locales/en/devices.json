@@ -39,6 +39,7 @@
   "device_offline_cannot_send": "Device is offline, cannot send tasks",
   "device_deleted": "Device Deleted",
   "device_deleted_hint": "The device associated with this chat has been deleted",
+  "start_new_chat": "Start New Chat",
   "device_busy_hint": "Device is busy with another task",
   "select_another_device": "Please select another device or wait for current task to complete",
   "refresh": "Refresh",

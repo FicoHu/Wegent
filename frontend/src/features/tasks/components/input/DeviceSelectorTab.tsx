@@ -32,6 +32,7 @@ import {
   Settings,
   Cpu,
   Trash2,
+  Plus,
 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -43,6 +44,7 @@ import {
 } from '@/features/devices/utils/execution-target'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { paths } from '@/config/paths'
 import type { DeviceInfo } from '@/apis/devices'
 
@@ -460,54 +462,66 @@ export function DeviceSelectorTab({
   if (hasMessages) {
     return (
       <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div
-              className={cn(
-                'flex items-center gap-1.5 px-2 py-1.5 rounded-md',
-                'bg-surface border border-border',
-                'text-xs text-text-secondary',
-                isTaskDeviceDeleted && 'border-red-300 bg-red-50',
-                className
-              )}
-            >
-              {isTaskDeviceDeleted ? (
-                <>
-                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                  <span className="text-red-600">{t('device_deleted')}</span>
-                </>
-              ) : selectedDevice ? (
-                <>
-                  {selectedDevice.device_type === 'cloud' ? (
-                    <Server className="w-3.5 h-3.5" />
-                  ) : (
-                    <Monitor className="w-3.5 h-3.5" />
-                  )}
-                  <span className="truncate max-w-[160px]">
-                    {selectedDevice.device_type === 'cloud'
-                      ? t('cloud_device_prefix')
-                      : t('local_device_prefix')}
-                    {selectedDevice.name}
-                  </span>
-                  <span
-                    className={cn(
-                      'w-1.5 h-1.5 rounded-full',
-                      getStatusColor(selectedDevice.status)
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={cn(
+                  'flex items-center gap-1.5 px-2 py-1.5 rounded-md',
+                  'bg-surface border border-border',
+                  'text-xs text-text-secondary',
+                  isTaskDeviceDeleted && 'border-red-300 bg-red-50',
+                  className
+                )}
+              >
+                {isTaskDeviceDeleted ? (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    <span className="text-red-600">{t('device_deleted')}</span>
+                  </>
+                ) : selectedDevice ? (
+                  <>
+                    {selectedDevice.device_type === 'cloud' ? (
+                      <Server className="w-3.5 h-3.5" />
+                    ) : (
+                      <Monitor className="w-3.5 h-3.5" />
                     )}
-                  />
-                </>
-              ) : (
-                <>
-                  <Cloud className="w-3.5 h-3.5" />
-                  <span>{t('cloud_mode')}</span>
-                </>
-              )}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            <p>{isTaskDeviceDeleted ? t('device_deleted_hint') : t('select_device_hint')}</p>
-          </TooltipContent>
-        </Tooltip>
+                    <span className="truncate max-w-[160px]">
+                      {selectedDevice.device_type === 'cloud'
+                        ? t('cloud_device_prefix')
+                        : t('local_device_prefix')}
+                      {selectedDevice.name}
+                    </span>
+                    <span
+                      className={cn(
+                        'w-1.5 h-1.5 rounded-full',
+                        getStatusColor(selectedDevice.status)
+                      )}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Cloud className="w-3.5 h-3.5" />
+                    <span>{t('cloud_mode')}</span>
+                  </>
+                )}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>{isTaskDeviceDeleted ? t('device_deleted_hint') : t('select_device_hint')}</p>
+            </TooltipContent>
+          </Tooltip>
+          {/* Show "Start New Chat" link when device is deleted */}
+          {isTaskDeviceDeleted && (
+            <Link
+              href={paths.chat.getHref()}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-primary/10 border border-primary/20 text-xs text-primary hover:bg-primary/20 transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{t('start_new_chat')}</span>
+            </Link>
+          )}
+        </div>
       </TooltipProvider>
     )
   }
