@@ -31,6 +31,7 @@ import {
   Check,
   Settings,
   Cpu,
+  Trash2,
 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -327,6 +328,13 @@ export function DeviceSelectorTab({
       : null
   }, [devices, selectedDeviceId, hasMessages, taskDeviceId])
 
+  // Check if the task was associated with a device that has been deleted
+  const isTaskDeviceDeleted = useMemo(() => {
+    if (!hasMessages || !taskDeviceId) return false
+    // If taskDeviceId exists but device not found in devices list, it means the device was deleted
+    return !devices.some(device => device.device_id === taskDeviceId)
+  }, [hasMessages, taskDeviceId, devices])
+
   useEffect(() => {
     if (hasMessages || isLoading || autoSelectionInitializedRef.current) {
       return
@@ -459,10 +467,16 @@ export function DeviceSelectorTab({
                 'flex items-center gap-1.5 px-2 py-1.5 rounded-md',
                 'bg-surface border border-border',
                 'text-xs text-text-secondary',
+                isTaskDeviceDeleted && 'border-red-300 bg-red-50',
                 className
               )}
             >
-              {selectedDevice ? (
+              {isTaskDeviceDeleted ? (
+                <>
+                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                  <span className="text-red-600">{t('device_deleted')}</span>
+                </>
+              ) : selectedDevice ? (
                 <>
                   {selectedDevice.device_type === 'cloud' ? (
                     <Server className="w-3.5 h-3.5" />
@@ -491,7 +505,7 @@ export function DeviceSelectorTab({
             </div>
           </TooltipTrigger>
           <TooltipContent side="top">
-            <p>{t('select_device_hint')}</p>
+            <p>{isTaskDeviceDeleted ? t('device_deleted_hint') : t('select_device_hint')}</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
