@@ -82,7 +82,7 @@ class AttachmentPromptProcessor:
 
                 sandbox_path = cls._build_sandbox_path(
                     task_id=task_id,
-                    subtask_id=subtask_id,
+                    subtask_id=att.get("subtask_id", subtask_id),
                     filename=att.get("original_filename", ""),
                 )
                 if sandbox_path:
