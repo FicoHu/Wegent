@@ -56,3 +56,46 @@ class TestDownloadAttachments:
             "/tmp/workspace/1233:executor:attachments/1642/xxx.md"
             in result.prompt[0]["text"]
         )
+
+    def test_string_prompt_does_not_inject_layout_guidance_in_local_mode(self):
+        """Local mode should rely on rewritten file paths instead of extra layout guidance."""
+        task_data = ExecutionRequest(
+            auth_token="test-token",  # noqa: S106
+            attachments=[{"id": 274, "original_filename": "xxx.md"}],
+        )
+        prompt = "summarize this attachment"
+
+        download_result = MagicMock()
+        download_result.success = [
+            {
+                "id": 274,
+                "original_filename": "xxx.md",
+                "local_path": "/workspace/1233/1233:executor:attachments/1642/xxx.md",
+                "mime_type": "text/markdown",
+                "file_size": 57036,
+            }
+        ]
+        download_result.failed = []
+
+        with (
+            patch("executor.config.config.EXECUTOR_MODE", "local"),
+            patch(
+                "executor.config.config.get_workspace_root",
+                return_value="/Users/test/.wegent-executor/workspace",
+            ),
+            patch(
+                "executor.services.attachment_downloader.AttachmentDownloader.download_all",
+                return_value=download_result,
+            ),
+        ):
+            result = download_attachments(
+                task_data=task_data,
+                task_id=1233,
+                subtask_id=1642,
+                prompt=prompt,
+            )
+
+        assert (
+            "Do not assume a workspace/<task_id>/attachments/ directory."
+            not in result.prompt
+        )

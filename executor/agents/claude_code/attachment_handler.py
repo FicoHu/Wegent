@@ -112,7 +112,7 @@ def download_attachments(
             # metadata and content, so path rewriting is sufficient.
             if isinstance(modified_prompt, str):
                 attachment_context = AttachmentPromptProcessor.build_attachment_context(
-                    result.success
+                    result.success,
                 )
                 if attachment_context:
                     modified_prompt += attachment_context

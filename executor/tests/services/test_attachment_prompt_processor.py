@@ -42,3 +42,24 @@ class TestAttachmentPromptProcessor:
             "/home/user/1233:executor:attachments/1642/xxx.md"
             not in processed[0]["text"]
         )
+
+    def test_build_attachment_context_lists_available_attachments_without_layout_guidance(
+        self,
+    ):
+        """Attachment context should list files without extra directory guidance."""
+        context = AttachmentPromptProcessor.build_attachment_context(
+            success_attachments=[
+                {
+                    "id": 274,
+                    "original_filename": "xxx.md",
+                    "local_path": "/Users/test/.wegent-executor/workspace/1233/1233:executor:attachments/1642/xxx.md",
+                    "file_size": 4096,
+                    "mime_type": "text/markdown",
+                }
+            ]
+        )
+
+        assert "xxx.md" in context
+        assert (
+            "Do not assume a workspace/<task_id>/attachments/ directory." not in context
+        )

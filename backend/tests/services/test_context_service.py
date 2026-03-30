@@ -1184,12 +1184,11 @@ class TestContextServiceFormatting:
             context,
             task_id=100,
             subtask_id=200,
-            include_sandbox_path=False,
         )
 
         assert prefix is not None
         assert "URL: /api/attachments/12345/download" in prefix
-        assert "File Path(already in sandbox)" not in prefix
+        assert "File Path(already in sandbox)" in prefix
 
     def test_build_document_text_prefix_with_truncation(self):
         """Test building document text prefix with truncation notice"""

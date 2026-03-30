@@ -12,7 +12,6 @@ from shared.models.knowledge import ChatContextsResult, KnowledgeBaseToolsResult
 
 @pytest.mark.unit
 class TestBuildExecutionRequestUserSubtaskId:
-    @pytest.mark.asyncio
     async def test_propagates_user_subtask_id_to_execution_request(self):
         """Ensure user_subtask_id is always propagated for downstream RAG persistence."""
         from app.services.chat.trigger import unified as trigger_unified
@@ -28,7 +27,6 @@ class TestBuildExecutionRequestUserSubtaskId:
             request,
             user_subtask_id,
             user_id,
-            include_sandbox_path=True,
         ):
             return request
 
@@ -66,9 +64,8 @@ class TestBuildExecutionRequestUserSubtaskId:
                     mock_builder.build.assert_called_once()
                     mock_process_contexts.assert_awaited_once()
 
-    @pytest.mark.asyncio
-    async def test_device_execution_omits_sandbox_path_in_context_processing(self):
-        """Device-routed tasks should not inject sandbox paths into prompt attachments."""
+    async def test_device_execution_keeps_sandbox_path_in_context_processing(self):
+        """Device-routed tasks should keep sandbox path placeholders for executor rewrite."""
         from app.services.chat.trigger import unified as trigger_unified
 
         mock_db = MagicMock()
@@ -113,10 +110,8 @@ class TestBuildExecutionRequestUserSubtaskId:
                         request_from_builder,
                         123,
                         7,
-                        include_sandbox_path=False,
                     )
 
-    @pytest.mark.asyncio
     async def test_does_not_process_contexts_when_user_subtask_id_is_none(self):
         """When user_subtask_id is missing, contexts processing should be skipped."""
         from app.services.chat.trigger import unified as trigger_unified
@@ -219,46 +214,3 @@ class TestProcessContextsAttachments:
                 "subtask_id": 1642,
             }
         ]
-
-    @pytest.mark.asyncio
-    async def test_omits_sandbox_path_for_device_context_processing(self):
-        """Device execution should tell preprocessing to omit sandbox paths."""
-        from app.services.chat.trigger import unified as trigger_unified
-
-        request = ExecutionRequest(
-            task_id=1233,
-            subtask_id=1643,
-            prompt="hello",
-            system_prompt="system",
-            model_config={},
-        )
-
-        ctx = ChatContextsResult(
-            final_message="processed",
-            has_table_context=False,
-            table_contexts=[],
-            kb=KnowledgeBaseToolsResult(
-                extra_tools=[],
-                enhanced_system_prompt="enhanced",
-                kb_meta_prompt="",
-            ),
-        )
-
-        with patch(
-            "app.services.chat.preprocessing.prepare_contexts_for_chat",
-            new=AsyncMock(return_value=ctx),
-        ) as mock_prepare_contexts:
-            with patch(
-                "app.services.chat.trigger.unified.context_service.get_attachments_by_subtask",
-                return_value=[],
-            ):
-                await trigger_unified._process_contexts(
-                    db=MagicMock(),
-                    request=request,
-                    user_subtask_id=1642,
-                    user_id=2,
-                    include_sandbox_path=False,
-                )
-
-        mock_prepare_contexts.assert_awaited_once()
-        assert mock_prepare_contexts.await_args.kwargs["include_sandbox_path"] is False

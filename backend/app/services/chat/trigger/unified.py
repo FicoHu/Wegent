@@ -323,7 +323,6 @@ async def build_execution_request(
                 request,
                 context_subtask_id,
                 user.id,
-                include_sandbox_path=device_id is None,
             )
 
         return request
@@ -337,7 +336,6 @@ async def _process_contexts(
     request: "ExecutionRequest",
     user_subtask_id: int,
     user_id: int,
-    include_sandbox_path: bool = True,
 ) -> "ExecutionRequest":
     """Process contexts (attachments, knowledge bases, etc.) for the request.
 
@@ -346,8 +344,6 @@ async def _process_contexts(
         request: ExecutionRequest to enhance
         user_subtask_id: User subtask ID for context retrieval
         user_id: User ID for context retrieval
-        include_sandbox_path: Whether to include sandbox file path metadata
-
     Returns:
         Enhanced ExecutionRequest with context information
     """
@@ -366,7 +362,6 @@ async def _process_contexts(
         task_id=request.task_id,
         context_window=model_context_window,
         model_config=request.model_config,
-        include_sandbox_path=include_sandbox_path,
     )
 
     # Update request with all processed context results.

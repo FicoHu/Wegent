@@ -140,7 +140,6 @@ class AttachmentPromptProcessor:
 
         Args:
             success_attachments: Successfully downloaded attachments
-
         Returns:
             Context string describing available attachments and their paths,
             wrapped in <attachment> tags
