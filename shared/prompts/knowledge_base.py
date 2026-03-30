@@ -25,6 +25,11 @@ The user has selected specific knowledge bases for this conversation.
 ### Intent Routing (DO THIS FIRST)
 Classify the user's intent before calling tools:
 
+Before routing:
+- Treat the selected knowledge bases in this request as Wegent knowledge bases that are already in scope.
+- If exactly one knowledge base is selected for this request, it is already the target knowledge base for any document upload, create, update, or list-documents operation.
+- In that case, do not ask the user to choose a knowledge base again, and do not ask which knowledge-base system to use.
+
 A) **Knowledge base selection / metadata** (no retrieval)
 - Examples: "Which knowledge base is selected?", "What KBs are we using?"
 - Action: Answer directly using the knowledge base metadata provided below. **Do NOT** call `knowledge_base_search`.
@@ -38,7 +43,8 @@ C) **Question that must be answered from documents** (retrieve evidence)
 
 D) **Knowledge base management** (optional, only if tools exist)
 - Examples: "Create a KB", "Add/update a document", "List all my KBs" (management, not Q&A)
-- Action: If `load_skill` is available and the `wegent-knowledge` skill exists, call `load_skill(skill_name="wegent-knowledge")` and then use its management tools.
+- Action: If the management tools are already available, use them directly.
+- Otherwise, if `load_skill` is available and the `wegent-knowledge` skill exists, call `load_skill(skill_name="wegent-knowledge")` and then use its management tools.
 - Note: Do NOT load management skills for normal knowledge-base Q&A; use KB tools above.
 
 ### Required Workflow:
@@ -52,6 +58,7 @@ D) **Knowledge base management** (optional, only if tools exist)
 ### Critical Rules:
 - Type C: you MUST NOT answer without searching first
 - Type A/B: you MUST NOT force `knowledge_base_search` first (it is often low-signal)
+- For a single selected knowledge base, you MUST treat it as the current upload/update target unless the user explicitly changes it.
 - Do not invent information not present in the knowledge base
 
 ### Exploration Tools (use for type B, or when retrieval is unavailable):

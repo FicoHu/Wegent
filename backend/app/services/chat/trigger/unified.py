@@ -26,6 +26,7 @@ from app.models.kind import Kind
 from app.models.subtask import Subtask
 from app.models.task import TaskResource
 from app.models.user import User
+from app.services.context import context_service
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -35,6 +36,17 @@ if TYPE_CHECKING:
     from shared.models.execution import ExecutionRequest
 
 logger = logging.getLogger(__name__)
+
+
+def _build_executor_attachment_payload(context: Any) -> dict[str, Any]:
+    """Serialize an attachment context for executor-side downloading."""
+    return {
+        "id": context.id,
+        "original_filename": context.original_filename,
+        "mime_type": context.mime_type,
+        "file_size": context.file_size,
+        "subtask_id": context.subtask_id,
+    }
 
 
 async def trigger_ai_response_unified(
@@ -102,6 +114,7 @@ async def trigger_ai_response_unified(
         team=team,
         user=user,
         message=message,
+        device_id=device_id,
         payload=payload,
         user_subtask_id=user_subtask_id,
         history_limit=history_limit,
@@ -134,6 +147,7 @@ async def build_execution_request(
     team: Kind,
     user: User,
     message: Union[str, list],
+    device_id: Optional[str] = None,
     payload: Any = None,
     user_subtask_id: Optional[int] = None,
     history_limit: Optional[int] = None,
@@ -304,7 +318,13 @@ async def build_execution_request(
             user_subtask_id if user_subtask_id else processed_subtask_id
         )
         if context_subtask_id:
-            request = await _process_contexts(db, request, context_subtask_id, user.id)
+            request = await _process_contexts(
+                db,
+                request,
+                context_subtask_id,
+                user.id,
+                include_sandbox_path=device_id is None,
+            )
 
         return request
 
@@ -317,6 +337,7 @@ async def _process_contexts(
     request: "ExecutionRequest",
     user_subtask_id: int,
     user_id: int,
+    include_sandbox_path: bool = True,
 ) -> "ExecutionRequest":
     """Process contexts (attachments, knowledge bases, etc.) for the request.
 
@@ -325,6 +346,7 @@ async def _process_contexts(
         request: ExecutionRequest to enhance
         user_subtask_id: User subtask ID for context retrieval
         user_id: User ID for context retrieval
+        include_sandbox_path: Whether to include sandbox file path metadata
 
     Returns:
         Enhanced ExecutionRequest with context information
@@ -344,6 +366,7 @@ async def _process_contexts(
         task_id=request.task_id,
         context_window=model_context_window,
         model_config=request.model_config,
+        include_sandbox_path=include_sandbox_path,
     )
 
     # Update request with all processed context results.
@@ -354,6 +377,10 @@ async def _process_contexts(
     request.system_prompt = ctx.kb.enhanced_system_prompt
     request.table_contexts = ctx.table_contexts
     request.kb_meta_prompt = ctx.kb.kb_meta_prompt
+    request.attachments = [
+        _build_executor_attachment_payload(context)
+        for context in context_service.get_attachments_by_subtask(db, user_subtask_id)
+    ]
     if ctx.kb.knowledge_base_ids:
         request.knowledge_base_ids = ctx.kb.knowledge_base_ids
         request.is_user_selected_kb = ctx.kb.is_user_selected_kb
@@ -363,10 +390,11 @@ async def _process_contexts(
 
     logger.info(
         "[ai_trigger_unified] Context processing completed: "
-        "user_subtask_id=%d, knowledge_base_ids=%s, table_contexts_count=%d",
+        "user_subtask_id=%d, knowledge_base_ids=%s, table_contexts_count=%d, attachments=%d",
         user_subtask_id,
         request.knowledge_base_ids,
         len(ctx.table_contexts),
+        len(request.attachments),
     )
 
     return request

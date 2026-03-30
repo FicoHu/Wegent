@@ -44,6 +44,24 @@ class TestKbMetaFormatter:
         assert "Topics: t1, t2" in prompt
         assert "KB Name: KB2" in prompt
 
+    def test_format_kb_meta_prompt_marks_single_selected_kb_as_target(self):
+        from app.services.chat.preprocessing.kb_meta import format_kb_meta_prompt
+
+        prompt = format_kb_meta_prompt(
+            [
+                {
+                    "kb_id": 1408,
+                    "kb_name": "222",
+                    "summary_text": "Upload target",
+                    "topics": [],
+                }
+            ]
+        )
+
+        assert "Current Request Target KB" in prompt
+        assert "222" in prompt
+        assert "1408" in prompt
+
     def test_select_kb_summary_text_prefers_long_for_small_list(self):
         from app.services.chat.preprocessing.kb_meta import select_kb_summary_text
 

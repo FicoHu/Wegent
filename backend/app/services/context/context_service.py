@@ -603,6 +603,7 @@ class ContextService:
         context: SubtaskContext,
         task_id: Optional[int] = None,
         subtask_id: Optional[int] = None,
+        include_sandbox_path: bool = True,
     ) -> Optional[str]:
         """
         Build a text prefix containing document content for prepending to messages.
@@ -613,6 +614,7 @@ class ContextService:
             context: SubtaskContext record with extracted_text
             task_id: Optional task ID for building sandbox path
             subtask_id: Optional subtask ID for building sandbox path
+            include_sandbox_path: Whether to include sandbox file path metadata
 
         Returns:
             Formatted text prefix without XML tags, or None if no extracted text
@@ -633,7 +635,9 @@ class ContextService:
         url = self.build_attachment_url(attachment_id)
 
         # Build sandbox path if task_id and subtask_id are provided
-        sandbox_path = self.build_sandbox_path(task_id, subtask_id, filename)
+        sandbox_path = None
+        if include_sandbox_path:
+            sandbox_path = self.build_sandbox_path(task_id, subtask_id, filename)
 
         # Build the prefix with metadata and optional truncation notice
         if sandbox_path:

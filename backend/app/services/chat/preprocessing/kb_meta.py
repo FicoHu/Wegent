@@ -117,9 +117,24 @@ def format_kb_meta_prompt(kb_meta_list: list[dict[str, Any]]) -> str:
 
     kb_list_str = "\n".join(kb_lines)
 
+    target_kb_note = ""
+    if len(kb_meta_list) == 1:
+        selected_kb = kb_meta_list[0]
+        kb_name = sanitize_prompt_identifier(
+            selected_kb.get("kb_name", "Unknown"), "Unknown"
+        )
+        kb_id = sanitize_prompt_identifier(selected_kb.get("kb_id", "N/A"), "N/A")
+        target_kb_note = (
+            "\nCurrent Request Target KB:\n"
+            f"- Use KB Name: {kb_name}, KB ID: {kb_id} as the target knowledge base "
+            "for document upload, create, update, and document-list operations in "
+            "this request.\n"
+        )
+
     return (
         "Available Knowledge Bases:\n"
-        f"{kb_list_str}\n\n"
+        f"{kb_list_str}\n"
+        f"{target_kb_note}\n"
         "Note: This metadata is provided for intent routing (e.g., answering which KBs are selected). "
         "Use the knowledge_base_search tool to retrieve document evidence when needed."
     )

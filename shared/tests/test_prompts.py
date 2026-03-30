@@ -39,6 +39,13 @@ class TestKBPromptConstants:
         assert "knowledge_base_search" in KB_PROMPT_STRICT
         assert "ONLY" in KB_PROMPT_STRICT or "only" in KB_PROMPT_STRICT
         assert "Intent Routing" in KB_PROMPT_STRICT  # New routing approach
+        assert "do not ask the user to choose a knowledge base again" in (
+            KB_PROMPT_STRICT.lower()
+        )
+        assert "already the target knowledge base" in KB_PROMPT_STRICT.lower()
+        assert "if the management tools are already available" in (
+            KB_PROMPT_STRICT.lower()
+        )
 
     def test_kb_prompt_relaxed_contains_required_content(self):
         """KB_PROMPT_RELAXED should contain relaxed mode instructions."""
