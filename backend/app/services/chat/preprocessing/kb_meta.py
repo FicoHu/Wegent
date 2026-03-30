@@ -129,6 +129,10 @@ def format_kb_meta_prompt(kb_meta_list: list[dict[str, Any]]) -> str:
             f"- Use KB Name: {kb_name}, KB ID: {kb_id} as the target knowledge base "
             "for document upload, create, update, and document-list operations in "
             "this request.\n"
+            f"- Use only KB ID: {kb_id} for those operations unless the user explicitly changes the target.\n"
+            f"- For upload/save requests, call create_document directly with KB ID: {kb_id} after reading or preparing the content.\n"
+            "- Do not ask clarifying questions about which knowledge base to use when this single selected KB is already the target.\n"
+            "- Do not call list_knowledge_bases, do not compare alternative knowledge bases, and do not switch to another KB automatically.\n"
         )
 
     return (

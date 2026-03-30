@@ -61,6 +61,10 @@ class TestKbMetaFormatter:
         assert "Current Request Target KB" in prompt
         assert "222" in prompt
         assert "1408" in prompt
+        assert "Do not call list_knowledge_bases" in prompt
+        assert "Use only KB ID: 1408" in prompt
+        assert "For upload/save requests, call create_document directly" in prompt
+        assert "Do not ask clarifying questions about which knowledge base" in prompt
 
     def test_select_kb_summary_text_prefers_long_for_small_list(self):
         from app.services.chat.preprocessing.kb_meta import select_kb_summary_text

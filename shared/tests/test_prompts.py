@@ -43,7 +43,14 @@ class TestKBPromptConstants:
             KB_PROMPT_STRICT.lower()
         )
         assert "already the target knowledge base" in KB_PROMPT_STRICT.lower()
+        assert "must use that exact kb id" in KB_PROMPT_STRICT.lower()
+        assert "do not call `list_knowledge_bases`" in KB_PROMPT_STRICT.lower()
         assert "if the management tools are already available" in (
+            KB_PROMPT_STRICT.lower()
+        )
+        assert "upload intent" in KB_PROMPT_STRICT.lower()
+        assert "call `create_document` directly" in KB_PROMPT_STRICT.lower()
+        assert "do not ask clarifying questions about which knowledge base" in (
             KB_PROMPT_STRICT.lower()
         )
 

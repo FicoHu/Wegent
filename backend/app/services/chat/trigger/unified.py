@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from shared.models.execution import ExecutionRequest
 
 logger = logging.getLogger(__name__)
+SELECTED_KB_PRELOAD_SKILL = "wegent-knowledge"
 
 
 def _build_executor_attachment_payload(context: Any) -> dict[str, Any]:
@@ -47,6 +48,32 @@ def _build_executor_attachment_payload(context: Any) -> dict[str, Any]:
         "file_size": context.file_size,
         "subtask_id": context.subtask_id,
     }
+
+
+def _ensure_selected_kb_skill_priority(request: "ExecutionRequest") -> None:
+    """Ensure selected-KB requests both preload and prioritize the KB skill."""
+    if not request.knowledge_base_ids or not request.is_user_selected_kb:
+        return
+
+    preload_skills = list(request.preload_skills or [])
+    if SELECTED_KB_PRELOAD_SKILL not in preload_skills:
+        preload_skills.append(SELECTED_KB_PRELOAD_SKILL)
+        request.preload_skills = preload_skills
+        logger.info(
+            "[ai_trigger_unified] Added preload skill '%s' for selected KBs: %s",
+            SELECTED_KB_PRELOAD_SKILL,
+            request.knowledge_base_ids,
+        )
+
+    user_selected_skills = list(request.user_selected_skills or [])
+    if SELECTED_KB_PRELOAD_SKILL not in user_selected_skills:
+        user_selected_skills.append(SELECTED_KB_PRELOAD_SKILL)
+        request.user_selected_skills = user_selected_skills
+        logger.info(
+            "[ai_trigger_unified] Added user-selected skill '%s' for selected KBs: %s",
+            SELECTED_KB_PRELOAD_SKILL,
+            request.knowledge_base_ids,
+        )
 
 
 async def trigger_ai_response_unified(
@@ -324,6 +351,23 @@ async def build_execution_request(
                 context_subtask_id,
                 user.id,
             )
+            if (
+                device_id
+                and request.knowledge_base_ids
+                and request.is_user_selected_kb
+                and SELECTED_KB_PRELOAD_SKILL not in (request.skill_names or [])
+            ):
+                from app.schemas.kind import Team as TeamCRD
+
+                team_crd = TeamCRD.model_validate(team.json)
+                bot = builder._get_bot_for_subtask(assistant_subtask, team, team_crd)
+                if bot:
+                    request = builder.resolve_request_preload_skills(
+                        request=request,
+                        bot=bot,
+                        team=team,
+                        user_id=user.id,
+                    )
 
         return request
 
@@ -382,6 +426,7 @@ async def _process_contexts(
         request.kb_tool_access_mode = ctx.kb.kb_tool_access_mode
         if ctx.kb.document_ids:
             request.document_ids = ctx.kb.document_ids
+        _ensure_selected_kb_skill_priority(request)
 
     logger.info(
         "[ai_trigger_unified] Context processing completed: "

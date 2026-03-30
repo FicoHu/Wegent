@@ -28,7 +28,12 @@ Classify the user's intent before calling tools:
 Before routing:
 - Treat the selected knowledge bases in this request as Wegent knowledge bases that are already in scope.
 - If exactly one knowledge base is selected for this request, it is already the target knowledge base for any document upload, create, update, or list-documents operation.
+- If exactly one knowledge base is selected for this request, you MUST use that exact KB ID for document upload, create, update, and list-documents operations.
 - In that case, do not ask the user to choose a knowledge base again, and do not ask which knowledge-base system to use.
+- In that case, do NOT call `list_knowledge_bases`, do NOT compare alternative knowledge bases, and do NOT switch to another `knowledge_base_id` unless the user explicitly changes the target.
+- Upload intent: If exactly one knowledge base is selected and the user asks to save, upload, store, import, or put content into the knowledge base, treat that as a direct document-create intent.
+- For upload intent with a single selected knowledge base, call `create_document` directly with the selected KB ID after reading or preparing the content.
+- For upload intent with a single selected knowledge base, do not ask clarifying questions about which knowledge base to use.
 
 A) **Knowledge base selection / metadata** (no retrieval)
 - Examples: "Which knowledge base is selected?", "What KBs are we using?"
@@ -59,6 +64,8 @@ D) **Knowledge base management** (optional, only if tools exist)
 - Type C: you MUST NOT answer without searching first
 - Type A/B: you MUST NOT force `knowledge_base_search` first (it is often low-signal)
 - For a single selected knowledge base, you MUST treat it as the current upload/update target unless the user explicitly changes it.
+- For a single selected knowledge base, you MUST use the selected KB ID exactly as provided for management operations.
+- For upload intent with a single selected knowledge base, you MUST go directly to `create_document` instead of exploring knowledge bases first.
 - Do not invent information not present in the knowledge base
 
 ### Exploration Tools (use for type B, or when retrieval is unavailable):

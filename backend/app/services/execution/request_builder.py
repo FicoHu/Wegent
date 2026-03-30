@@ -29,6 +29,7 @@ from shared.models.db import Kind, User
 from shared.utils.url_util import domains_match
 
 logger = logging.getLogger(__name__)
+SELECTED_KB_PRELOAD_SKILL = "wegent-knowledge"
 
 
 class TaskRequestBuilder:
@@ -320,6 +321,115 @@ class TaskRequestBuilder:
             trace_context=trace_context,
             executor_name=subtask.executor_name,
         )
+
+    def resolve_request_preload_skills(
+        self,
+        *,
+        request: ExecutionRequest,
+        bot: Kind,
+        team: Kind,
+        user_id: int,
+    ) -> ExecutionRequest:
+        """Resolve request-level preload skills into full skill and MCP config.
+
+        This is used when downstream context processing adds preload skills after the
+        initial build phase, such as selected knowledge bases that must turn into a
+        concrete public skill with ClaudeCode MCP wiring.
+        """
+        requested_skill_names = []
+        for skill_name in [
+            *(request.preload_skills or []),
+            *(request.user_selected_skills or []),
+        ]:
+            if isinstance(skill_name, str) and skill_name not in requested_skill_names:
+                requested_skill_names.append(skill_name)
+
+        if not requested_skill_names:
+            return request
+
+        existing_skill_names = {
+            skill_name
+            for skill_name in (request.skill_names or [])
+            if isinstance(skill_name, str)
+        }
+        missing_skill_names = [
+            skill_name
+            for skill_name in requested_skill_names
+            if skill_name not in existing_skill_names
+        ]
+        if not missing_skill_names:
+            return request
+
+        user_preload_skills = []
+        for skill_name in requested_skill_names:
+            skill_ref = (request.skill_refs or {}).get(skill_name, {})
+            explicit_ref = {
+                "name": skill_name,
+                "namespace": skill_ref.get("namespace", "default"),
+                "is_public": skill_ref.get("is_public", False),
+            }
+
+            if (
+                skill_name == SELECTED_KB_PRELOAD_SKILL
+                and request.knowledge_base_ids
+                and request.is_user_selected_kb
+            ):
+                explicit_ref["namespace"] = "default"
+                explicit_ref["is_public"] = True
+
+            user_preload_skills.append(explicit_ref)
+
+        (
+            resolved_skills,
+            resolved_preload_skills,
+            resolved_user_selected,
+            skill_refs,
+        ) = self._get_bot_skills(
+            bot=bot,
+            team=team,
+            user_id=user_id,
+            user_preload_skills=user_preload_skills,
+        )
+
+        preload_skill_refs = {
+            name: skill_refs[name]
+            for name in resolved_preload_skills
+            if name in skill_refs
+        }
+
+        request.skill_configs = resolved_skills
+        request.skill_names = [skill["name"] for skill in resolved_skills]
+        request.preload_skills = resolved_preload_skills
+        request.user_selected_skills = resolved_user_selected
+        request.skill_refs = skill_refs
+        request.preload_skill_refs = preload_skill_refs
+
+        if not request.bot:
+            return request
+
+        bot_config = request.bot[0]
+        existing_bot_skills = set(bot_config.get("skills", []))
+        for skill_name in missing_skill_names:
+            if skill_name not in existing_bot_skills:
+                bot_config.setdefault("skills", []).append(skill_name)
+                existing_bot_skills.add(skill_name)
+
+        if bot_config.get("shell_type") == "ClaudeCode":
+            new_skill_configs = [
+                skill_config
+                for skill_config in resolved_skills
+                if skill_config.get("name") in missing_skill_names
+            ]
+            if new_skill_configs:
+                self._prepare_mcp_for_claude_code(bot_config, new_skill_configs)
+
+        logger.info(
+            "[TaskRequestBuilder] Resolved request preload skills: added=%s, total_skills=%s",
+            missing_skill_names,
+            request.skill_names,
+        )
+
+        return request
 
     # =========================================================================
     # Bot Resolution (from ChatConfigBuilder)
