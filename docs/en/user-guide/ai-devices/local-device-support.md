@@ -80,22 +80,6 @@ curl -fsSL https://github.com/wecode-ai/Wegent/releases/download/v1.0.0/local_ex
 $env:WEGENT_VERSION='v1.0.0'; irm https://github.com/wecode-ai/Wegent/releases/latest/download/local_executor_install.ps1 | iex
 ```
 
-#### Version Without Claude Code
-
-If you don't need Claude Code functionality, you can download a lightweight version without Claude Code. This version has a smaller file size and is suitable for scenarios where you only need to use other AI models.
-
-On the [GitHub Releases](https://github.com/wecode-ai/Wegent/releases) page, download files with the `-no-cc` suffix:
-- `wegent-executor-linux-amd64-no-cc`
-- `wegent-executor-linux-arm64-no-cc`
-
-Usage is the same as the standard version:
-
-```bash
-wegent-executor-no-cc --mode local --token YOUR_JWT_TOKEN
-```
-
-> **Note**: The version without Claude Code cannot use Bots with ClaudeCode shell type.
-
 #### Manual Installation (Development)
 
 1. Clone or download the Wegent repository

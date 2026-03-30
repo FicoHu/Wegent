@@ -17,7 +17,7 @@ on:
 env:
   GIT_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || 'main' }}
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ toLower(github.repository_owner) }}
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
 
 concurrency:
   group: publish-image
@@ -623,7 +623,7 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
         run: |
           uv sync --group build
-          uv run python scripts/build_local.py --version ${{ needs.prepare-release.outputs.new_version }} --target-platform Linux
+          uv run python scripts/build_local.py --version ${{ needs.prepare-release.outputs.new_version }}
 
       - name: Rename binary with platform suffix
         run: |
@@ -634,44 +634,6 @@ jobs:
         with:
           name: wegent-executor-linux-amd64
           path: executor/dist/wegent-executor-linux-amd64
-          retention-days: 1
-
-  build-executor-local-linux-amd64-no-cc:
-    needs: prepare-release
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.GIT_REF }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies and build (without Claude Code)
-        working-directory: executor
-        env:
-          GITHUB_REPO: ${{ github.repository }}
-        run: |
-          uv sync --group build
-          uv run python scripts/build_local.py --version ${{ needs.prepare-release.outputs.new_version }} --target-platform Linux --without-claude-code
-
-      - name: Rename binary with platform suffix
-        run: |
-          mv executor/dist/wegent-executor-no-cc executor/dist/wegent-executor-linux-amd64-no-cc
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: wegent-executor-linux-amd64-no-cc
-          path: executor/dist/wegent-executor-linux-amd64-no-cc
           retention-days: 1
 
   build-executor-local-linux-arm64:
@@ -699,7 +661,7 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
         run: |
           uv sync --group build
-          uv run python scripts/build_local.py --version ${{ needs.prepare-release.outputs.new_version }} --target-platform Linux
+          uv run python scripts/build_local.py --version ${{ needs.prepare-release.outputs.new_version }}
 
       - name: Rename binary with platform suffix
         run: |
@@ -710,44 +672,6 @@ jobs:
         with:
           name: wegent-executor-linux-arm64
           path: executor/dist/wegent-executor-linux-arm64
-          retention-days: 1
-
-  build-executor-local-linux-arm64-no-cc:
-    needs: prepare-release
-    runs-on: ubuntu-22.04-arm
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.GIT_REF }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies and build (without Claude Code)
-        working-directory: executor
-        env:
-          GITHUB_REPO: ${{ github.repository }}
-        run: |
-          uv sync --group build
-          uv run python scripts/build_local.py --version ${{ needs.prepare-release.outputs.new_version }} --target-platform Linux --without-claude-code
-
-      - name: Rename binary with platform suffix
-        run: |
-          mv executor/dist/wegent-executor-no-cc executor/dist/wegent-executor-linux-arm64-no-cc
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: wegent-executor-linux-arm64-no-cc
-          path: executor/dist/wegent-executor-linux-arm64-no-cc
           retention-days: 1
 
   # ============================================================================
@@ -871,9 +795,7 @@ jobs:
       - build-executor-local-macos-arm64
       - build-executor-local-macos-amd64
       - build-executor-local-linux-amd64
-      - build-executor-local-linux-amd64-no-cc
       - build-executor-local-linux-arm64
-      - build-executor-local-linux-arm64-no-cc
       - build-executor-local-windows-amd64
     runs-on: ubuntu-latest
     permissions:
@@ -950,9 +872,7 @@ jobs:
             ./executor-binaries/wegent-executor-macos-arm64
             ./executor-binaries/wegent-executor-macos-amd64
             ./executor-binaries/wegent-executor-linux-amd64
-            ./executor-binaries/wegent-executor-linux-amd64-no-cc
             ./executor-binaries/wegent-executor-linux-arm64
-            ./executor-binaries/wegent-executor-linux-arm64-no-cc
             ./executor-binaries/wegent-executor-windows-amd64.exe
             ./executor/scripts/local_executor_install.sh
             ./executor/scripts/local_executor_install.ps1

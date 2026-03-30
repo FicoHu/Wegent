@@ -323,7 +323,6 @@ def build_executable(
     target_arch: str | None = None,
     target_platform: str | None = None,
     version: str | None = None,
-    without_claude_code: bool = False,
 ):
     """Build the executable using PyInstaller.
 
@@ -333,7 +332,6 @@ def build_executable(
         target_platform: Target platform for cross-compilation (e.g., 'Windows', 'Darwin', 'Linux').
                         If None, builds for the current platform.
         version: Version string to embed in the binary. If None, reads from pyproject.toml.
-        without_claude_code: If True, builds a version without Claude Code support.
     """
     project_root = get_project_root()
     executor_root = get_executor_root()
@@ -347,8 +345,6 @@ def build_executable(
     print(f"Building version: {version}")
     if target_platform:
         print(f"Target platform: {target_platform}")
-    if without_claude_code:
-        print("Building WITHOUT Claude Code support")
     original_version_content = embed_version_in_source(version)
 
     # Get GitHub repo from environment and embed it
@@ -362,19 +358,8 @@ def build_executable(
         # Determine output name based on platform
         if platform.system() == "Windows":
             output_name = "wegent-executor.exe"
-            pyinstaller_name = "wegent-executor"
         else:
             output_name = "wegent-executor"
-            pyinstaller_name = "wegent-executor"
-
-        # Adjust names if building without Claude Code
-        if without_claude_code:
-            if platform.system() == "Windows":
-                output_name = "wegent-executor-no-cc.exe"
-                pyinstaller_name = "wegent-executor-no-cc"
-            else:
-                output_name = "wegent-executor-no-cc"
-                pyinstaller_name = "wegent-executor-no-cc"
 
         # PyInstaller command
         cmd = [
@@ -382,7 +367,7 @@ def build_executable(
             "-m",
             "PyInstaller",
             "--onefile",
-            f"--name={pyinstaller_name}",
+            "--name=wegent-executor",
             f"--distpath={executor_root / 'dist'}",
             f"--workpath={executor_root / 'build'}",
             f"--specpath={executor_root}",
@@ -473,68 +458,59 @@ def build_executable(
             "--hidden-import=anyio",
             "--hidden-import=anyio._backends",
             "--hidden-import=anyio._backends._asyncio",
+            # Claude Code SDK
+            "--hidden-import=claude_code_sdk",
+            # MCP dependencies (required by claude_agent_sdk -> mcp)
+            "--hidden-import=starlette",
+            "--hidden-import=starlette.applications",
+            "--hidden-import=starlette.responses",
+            "--hidden-import=starlette.routing",
+            "--hidden-import=starlette.middleware",
+            "--hidden-import=starlette.requests",
+            "--hidden-import=starlette.websockets",
+            "--hidden-import=starlette.staticfiles",
+            "--hidden-import=starlette.templating",
+            "--hidden-import=starlette.background",
+            "--hidden-import=starlette.concurrency",
+            "--hidden-import=starlette.config",
+            "--hidden-import=starlette.convertors",
+            "--hidden-import=starlette.datastructures",
+            "--hidden-import=starlette.endpoints",
+            "--hidden-import=starlette.exceptions",
+            "--hidden-import=starlette.formparsers",
+            "--hidden-import=starlette.middleware.authentication",
+            "--hidden-import=starlette.middleware.base",
+            "--hidden-import=starlette.middleware.cors",
+            "--hidden-import=starlette.middleware.errors",
+            "--hidden-import=starlette.middleware.gzip",
+            "--hidden-import=starlette.middleware.httpsredirect",
+            "--hidden-import=starlette.middleware.sessions",
+            "--hidden-import=starlette.middleware.trustedhost",
+            "--hidden-import=starlette.middleware.wsgi",
+            "--hidden-import=starlette.schemas",
+            "--hidden-import=starlette.status",
+            "--hidden-import=starlette.testclient",
+            "--hidden-import=starlette.types",
+            "--hidden-import=sse_starlette",
+            "--hidden-import=sse_starlette.sse",
+            # Tokenizer plugin used by tiktoken at runtime
+            "--hidden-import=tiktoken_ext.openai_public",
+            # SSL certificates (needed for HTTPS connections)
+            "--collect-data=certifi",
+            "--collect-data=tiktoken",
+            "--collect-data=tiktoken_ext",
         ]
 
-        # Add Claude Code SDK hidden imports only if not excluded
-        if not without_claude_code:
-            cmd += [
-                # Claude Code SDK
-                "--hidden-import=claude_code_sdk",
-                # MCP dependencies (required by claude_agent_sdk -> mcp)
-                "--hidden-import=starlette",
-                "--hidden-import=starlette.applications",
-                "--hidden-import=starlette.responses",
-                "--hidden-import=starlette.routing",
-                "--hidden-import=starlette.middleware",
-                "--hidden-import=starlette.requests",
-                "--hidden-import=starlette.websockets",
-                "--hidden-import=starlette.staticfiles",
-                "--hidden-import=starlette.templating",
-                "--hidden-import=starlette.background",
-                "--hidden-import=starlette.concurrency",
-                "--hidden-import=starlette.config",
-                "--hidden-import=starlette.convertors",
-                "--hidden-import=starlette.datastructures",
-                "--hidden-import=starlette.endpoints",
-                "--hidden-import=starlette.exceptions",
-                "--hidden-import=starlette.formparsers",
-                "--hidden-import=starlette.middleware.authentication",
-                "--hidden-import=starlette.middleware.base",
-                "--hidden-import=starlette.middleware.cors",
-                "--hidden-import=starlette.middleware.errors",
-                "--hidden-import=starlette.middleware.gzip",
-                "--hidden-import=starlette.middleware.httpsredirect",
-                "--hidden-import=starlette.middleware.sessions",
-                "--hidden-import=starlette.middleware.trustedhost",
-                "--hidden-import=starlette.middleware.wsgi",
-                "--hidden-import=starlette.schemas",
-                "--hidden-import=starlette.status",
-                "--hidden-import=starlette.testclient",
-                "--hidden-import=starlette.types",
-                "--hidden-import=sse_starlette",
-                "--hidden-import=sse_starlette.sse",
-                # Tokenizer plugin used by tiktoken at runtime
-                "--hidden-import=tiktoken_ext.openai_public",
-                # SSL certificates (needed for HTTPS connections)
-                "--collect-data=certifi",
-                "--collect-data=tiktoken",
-                "--collect-data=tiktoken_ext",
-            ]
-
         # Add Claude CLI binary for Linux and Windows (macOS uses system-installed)
-        # Skip if without_claude_code is True
-        if not without_claude_code:
-            claude_binary = find_claude_agent_sdk_binary(
-                target_platform=effective_platform
+        claude_binary = find_claude_agent_sdk_binary(target_platform=effective_platform)
+        if claude_binary:
+            src_path, dest_dir = claude_binary
+            cmd.append(f"--add-binary={src_path}{os.pathsep}{dest_dir}")
+            print(f"Adding Claude CLI binary to build: {src_path} -> {dest_dir}")
+        elif effective_platform in ["Windows", "Linux"]:
+            print(
+                f"Warning: Claude CLI binary not found for {effective_platform}, executor may fail"
             )
-            if claude_binary:
-                src_path, dest_dir = claude_binary
-                cmd.append(f"--add-binary={src_path}{os.pathsep}{dest_dir}")
-                print(f"Adding Claude CLI binary to build: {src_path} -> {dest_dir}")
-            elif effective_platform in ["Windows", "Linux"]:
-                print(
-                    f"Warning: Claude CLI binary not found for {effective_platform}, executor may fail"
-                )
 
         # Continue with remaining options
         cmd += [
@@ -573,15 +549,6 @@ def build_executable(
             for imp in windows_imports:
                 cmd.insert(-1, imp)
             print("Added Windows-specific hidden imports")
-
-        # Exclude Claude Code SDK if without_claude_code is True
-        if without_claude_code:
-            cmd += [
-                "--exclude-module=claude_code_sdk",
-                "--exclude-module=claude_agent_sdk",
-                "--exclude-module=mcp",
-            ]
-            print("Building without Claude Code support (excluded modules)")
 
         # Add target architecture for cross-compilation on macOS
         if target_arch and platform.system() == "Darwin":
@@ -637,11 +604,6 @@ def main():
         "--version",
         help="Override version number (defaults to pyproject.toml version)",
     )
-    parser.add_argument(
-        "--without-claude-code",
-        action="store_true",
-        help="Build a version without Claude Code support (smaller binary, no Claude Code dependency)",
-    )
     args = parser.parse_args()
 
     print("=" * 60)
@@ -653,8 +615,6 @@ def main():
         print(f"Target architecture: {args.target_arch}")
     if args.target_platform:
         print(f"Target platform: {args.target_platform}")
-    if args.without_claude_code:
-        print("Build mode: WITHOUT Claude Code support")
     print()
 
     # Clean previous builds
@@ -665,7 +625,6 @@ def main():
         target_arch=args.target_arch,
         target_platform=args.target_platform,
         version=args.version,
-        without_claude_code=args.without_claude_code,
     )
 
     print()

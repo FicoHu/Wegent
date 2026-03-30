@@ -82,22 +82,6 @@ curl -fsSL https://github.com/wecode-ai/Wegent/releases/download/v1.0.0/local_ex
 $env:WEGENT_VERSION='v1.0.0'; irm https://github.com/wecode-ai/Wegent/releases/latest/download/local_executor_install.ps1 | iex
 ```
 
-#### 不包含 Claude Code 的版本
-
-如果您不需要使用 Claude Code 功能，可以下载不含 Claude Code 的精简版本。该版本体积更小，适合只需要使用其他 AI 模型的场景。
-
-在 [GitHub Releases](https://github.com/wecode-ai/Wegent/releases) 页面下载带有 `-no-cc` 后缀的文件：
-- `wegent-executor-linux-amd64-no-cc`
-- `wegent-executor-linux-arm64-no-cc`
-
-使用方法与标准版本相同：
-
-```bash
-wegent-executor-no-cc --mode local --token YOUR_JWT_TOKEN
-```
-
-> **注意**：不含 Claude Code 的版本无法使用 ClaudeCode shell 类型的 Bot。
-
 #### 手动安装（开发环境）
 
 1. 克隆或下载 Wegent 仓库
