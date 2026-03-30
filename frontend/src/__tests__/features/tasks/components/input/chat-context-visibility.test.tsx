@@ -106,9 +106,8 @@ function createProps(taskType: ChatInputControlsProps['taskType']): ChatInputCon
     setSelectedContexts: jest.fn(),
     attachmentState: {
       attachments: [],
-      isUploading: false,
-      isDragOver: false,
-      uploadProgress: 0,
+      uploadingFiles: new Map(),
+      errors: new Map(),
     },
     onFileSelect: jest.fn(),
     onAttachmentRemove: jest.fn(),
