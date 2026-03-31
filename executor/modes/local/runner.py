@@ -262,7 +262,7 @@ class LocalRunner:
         # Docker-internal address (e.g. http://backend:8000) unreachable from
         # the local executor. Use the executor's own WEGENT_BACKEND_URL instead.
         if config.WEGENT_BACKEND_URL:
-            task_data.backend_url = config.WEGENT_BACKEND_URL
+            task_data.backend_url = config.WEGENT_BACKEND_URL.rstrip("/")
 
         logger.info(f"Enqueuing task: task_id={task_id}")
         await self.task_queue.put(task_data)

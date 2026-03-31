@@ -340,19 +340,8 @@ def extract_claude_options(task_data: ExecutionRequest) -> Dict[str, Any]:
                 ),
             )
             # Replace placeholders in MCP servers config with actual values
-            # Override backend_url with executor's WEGENT_BACKEND_URL.
-            # Backend may set it to an internal/WSS address unreachable from local executor.
-            from executor.config import config as executor_config
-
-            executor_backend_url = executor_config.WEGENT_BACKEND_URL
-            logger.info(
-                "[MCP] backend_url override check: task_data=%s, executor=%s",
-                task_data.backend_url,
-                executor_backend_url,
-            )
-            if executor_backend_url:
-                task_data.backend_url = executor_backend_url.rstrip("/")
-
+            # NOTE: backend_url override for local mode is handled centrally
+            # in LocalRunner.enqueue_task() before any agent processes the task.
             logger.info(
                 "[MCP] Variable substitution context: backend_url=%s, task_token=%s",
                 task_data.backend_url,
