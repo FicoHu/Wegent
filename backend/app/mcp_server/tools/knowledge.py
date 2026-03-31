@@ -19,23 +19,161 @@ Tools are declared using @mcp_tool decorator which provides:
 - Parameter filtering (token_info is hidden from MCP schema)
 """
 
+import asyncio
 import logging
-from typing import Any, Dict, Optional
-
-from sqlalchemy.orm import Session
+import threading
+from typing import Any, Callable, Coroutine, Dict, Optional, TypeVar
 
 from app.db.session import SessionLocal
 from app.mcp_server.auth import TaskTokenInfo
+from app.mcp_server.knowledge_access import get_user_from_token
 from app.mcp_server.tools.decorator import build_mcp_tools_dict, mcp_tool
-from app.models.user import User
 from app.services.knowledge.orchestrator import knowledge_orchestrator
+from app.services.rag.document_read_service import document_read_service
+from app.services.rag.retrieval_service import RetrievalService
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
-def _get_user_from_token(db: Session, token_info: TaskTokenInfo) -> Optional[User]:
-    """Get user from token info."""
-    return db.query(User).filter(User.id == token_info.user_id).first()
+def _run_async_from_sync(
+    async_func: Callable[..., Coroutine[Any, Any, T]],
+    *args: Any,
+    **kwargs: Any,
+) -> T:
+    """Run async work from a synchronous MCP tool without breaking active loops."""
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(async_func(*args, **kwargs))
+
+    result_holder: Dict[str, T] = {}
+    error_holder: Dict[str, BaseException] = {}
+
+    def _runner() -> None:
+        try:
+            result_holder["value"] = asyncio.run(async_func(*args, **kwargs))
+        except BaseException as exc:
+            error_holder["value"] = exc
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join()
+
+    if "value" in error_holder:
+        raise error_holder["value"]
+
+    return result_holder["value"]
+
+
+async def _retrieve_chunks_for_mcp(
+    *,
+    query: str,
+    knowledge_base_id: int,
+    top_k: int,
+    document_ids: Optional[list[int]],
+    user_id: int,
+    user_name: str,
+    user_subtask_id: int,
+) -> Dict[str, Any]:
+    """Run chunk retrieval with a session owned by the executing thread."""
+
+    db = SessionLocal()
+    try:
+        retrieval_service = RetrievalService()
+        return await retrieval_service.retrieve_for_chat_shell(
+            query=query,
+            knowledge_base_ids=[knowledge_base_id],
+            db=db,
+            max_results=top_k,
+            document_ids=document_ids,
+            user_name=user_name,
+            route_mode="rag_retrieval",
+            user_id=user_id,
+            user_subtask_id=user_subtask_id,
+            context_window=None,
+            used_context_tokens=0,
+            reserved_output_tokens=4096,
+            context_buffer_ratio=0.1,
+            max_direct_chunks=500,
+            restricted_mode=False,
+        )
+    finally:
+        db.close()
+
+
+def _format_chunk_search_result(
+    result: Dict[str, Any],
+    knowledge_base_id: int,
+) -> Dict[str, Any]:
+    """Normalize retrieval output into the MCP chunk-search response shape."""
+
+    items = []
+    for record in result.get("records", []):
+        metadata = record.get("metadata") or {}
+        raw_document_id = metadata.get("doc_ref")
+        document_id = int(raw_document_id) if raw_document_id is not None else None
+        chunk_id = metadata.get("chunk_id", metadata.get("chunk_index"))
+        items.append(
+            {
+                "document_id": document_id,
+                "document_name": record.get("title", "Unknown"),
+                "chunk_id": chunk_id,
+                "content": record.get("content", ""),
+                "score": record.get("score"),
+                "kb_id": record.get("knowledge_base_id", knowledge_base_id),
+            }
+        )
+
+    return {
+        "mode": result.get("mode", "rag_retrieval"),
+        "total": len(items),
+        "items": items,
+    }
+
+
+def _search_knowledge_base_impl(
+    token_info: TaskTokenInfo,
+    *,
+    knowledge_base_id: int,
+    query: str,
+    max_results: int,
+    document_ids: Optional[list[int]] = None,
+) -> Dict[str, Any]:
+    """Shared implementation for MCP knowledge-base search tools."""
+
+    db = SessionLocal()
+    try:
+        user = get_user_from_token(db, token_info)
+        if not user:
+            return {"error": "User not found", "total": 0, "items": []}
+        user_id = user.id
+        user_name = user.user_name
+
+    finally:
+        db.close()
+
+    try:
+        result = _run_async_from_sync(
+            _retrieve_chunks_for_mcp,
+            query=query,
+            knowledge_base_id=knowledge_base_id,
+            top_k=max_results,
+            document_ids=document_ids,
+            user_id=user_id,
+            user_name=user_name,
+            user_subtask_id=token_info.subtask_id,
+        )
+        return _format_chunk_search_result(result, knowledge_base_id)
+
+    except ValueError as e:
+        logger.warning(f"[MCP] knowledge base search validation error: {e}")
+        return {"error": str(e), "total": 0, "items": []}
+
+    except Exception as e:
+        logger.error(f"[MCP] knowledge base search error: {e}", exc_info=True)
+        return {"error": str(e), "total": 0, "items": []}
 
 
 @mcp_tool(
@@ -65,7 +203,7 @@ def list_knowledge_bases(
     """
     db = SessionLocal()
     try:
-        user = _get_user_from_token(db, token_info)
+        user = get_user_from_token(db, token_info)
         if not user:
             return {"error": "User not found", "total": 0, "items": []}
 
@@ -113,7 +251,7 @@ def list_documents(
     """
     db = SessionLocal()
     try:
-        user = _get_user_from_token(db, token_info)
+        user = get_user_from_token(db, token_info)
         if not user:
             return {"error": "User not found", "total": 0, "items": []}
 
@@ -138,6 +276,112 @@ def list_documents(
 
     finally:
         db.close()
+
+
+@mcp_tool(
+    name="read_document",
+    description="Read document content from a knowledge base using structured parameters instead of a resource URI.",
+    server="knowledge",
+    param_descriptions={
+        "knowledge_base_id": "Knowledge base ID that owns the document",
+        "document_id": "Document ID to read",
+        "offset": "Content offset for partial reads (default: 0)",
+        "limit": "Maximum characters to read (default: 4000)",
+    },
+)
+def read_document(
+    token_info: TaskTokenInfo,
+    knowledge_base_id: int,
+    document_id: int,
+    offset: int = 0,
+    limit: int = 4000,
+) -> Dict[str, Any]:
+    """
+    Read a document with optional pagination.
+
+    Args:
+        token_info: Task token information containing user context
+        knowledge_base_id: Knowledge base ID that owns the document
+        document_id: Document ID to read
+        offset: Content offset for partial reads
+        limit: Maximum characters to read
+
+    Returns:
+        Dict with document content and pagination metadata
+    """
+    db = SessionLocal()
+    try:
+        user = get_user_from_token(db, token_info)
+        if not user:
+            return {"error": "User not found"}
+
+        results = document_read_service.read_documents(
+            db=db,
+            document_ids=[document_id],
+            offset=offset,
+            limit=limit,
+            knowledge_base_ids=[knowledge_base_id],
+            user_subtask_id=token_info.subtask_id,
+            user_id=user.id,
+        )
+
+        if not results:
+            return {"error": "Document not found"}
+
+        result = results[0]
+        if result.get("error"):
+            return {"error": result["error"]}
+
+        return {
+            "document_id": result["id"],
+            "name": result.get("name", ""),
+            "content": result.get("content", ""),
+            "total_length": result.get("total_length", 0),
+            "offset": result.get("offset", 0),
+            "returned_length": result.get("returned_length", 0),
+            "has_more": result.get("has_more", False),
+            "kb_id": result.get("kb_id"),
+        }
+
+    except ValueError as e:
+        logger.warning(f"[MCP] read_document validation error: {e}")
+        return {"error": str(e)}
+
+    except Exception as e:
+        logger.error(f"[MCP] read_document error: {e}", exc_info=True)
+        return {"error": str(e)}
+
+    finally:
+        db.close()
+
+
+@mcp_tool(
+    name="knowledge_base_search",
+    description="Search a knowledge base for relevant information using the same high-level tool name used in chat mode.",
+    server="knowledge",
+    param_descriptions={
+        "knowledge_base_id": "Knowledge base ID to search",
+        "query": "Search query for semantic retrieval",
+        "max_results": "Maximum number of chunk matches to return (default: 5)",
+        "document_ids": "Optional document IDs to restrict the search scope",
+    },
+)
+def knowledge_base_search(
+    token_info: TaskTokenInfo,
+    knowledge_base_id: int,
+    query: str,
+    max_results: int = 5,
+    document_ids: Optional[list[int]] = None,
+) -> Dict[str, Any]:
+    """Search a knowledge base for relevant chunks using a chat-shell-aligned tool name."""
+
+    return _search_knowledge_base_impl(
+        token_info,
+        knowledge_base_id=knowledge_base_id,
+        query=query,
+        max_results=max_results,
+        document_ids=document_ids,
+    )
 
 
 @mcp_tool(
@@ -184,7 +428,7 @@ def create_knowledge_base(
     """
     db = SessionLocal()
     try:
-        user = _get_user_from_token(db, token_info)
+        user = get_user_from_token(db, token_info)
         if not user:
             return {"error": "User not found"}
 
@@ -269,7 +513,7 @@ def create_document(
     """
     db = SessionLocal()
     try:
-        user = _get_user_from_token(db, token_info)
+        user = get_user_from_token(db, token_info)
         if not user:
             return {"error": "User not found"}
 
@@ -335,7 +579,7 @@ def update_document_content(
     """
     db = SessionLocal()
     try:
-        user = _get_user_from_token(db, token_info)
+        user = get_user_from_token(db, token_info)
         if not user:
             return {"error": "User not found"}
 

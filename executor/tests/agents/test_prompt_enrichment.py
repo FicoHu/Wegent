@@ -69,3 +69,33 @@ class TestInjectKbMetaPrompt:
 
         assert "use the selected knowledge base first" in result.lower()
         assert "before web search" in result.lower()
+
+    def test_local_mode_tells_executor_to_use_read_document_tool(self):
+        prompt = "Read the selected knowledge base document."
+        kb_meta_prompt = "Knowledge Bases In Scope:\n- KB Name: 222, KB ID: 1408"
+
+        result = inject_kb_meta_prompt(
+            prompt,
+            kb_meta_prompt,
+            executor_mode="local",
+            is_user_selected_kb=True,
+        )
+
+        assert "read_document" in result
+        assert "do not construct mcp resource uris manually" in result.lower()
+
+    def test_local_mode_tells_executor_to_use_knowledge_base_search_for_relevant_passages(
+        self,
+    ):
+        prompt = "Find the relevant knowledge base passage."
+        kb_meta_prompt = "Knowledge Bases In Scope:\n- KB Name: 222, KB ID: 1408"
+
+        result = inject_kb_meta_prompt(
+            prompt,
+            kb_meta_prompt,
+            executor_mode="local",
+            is_user_selected_kb=True,
+        )
+
+        assert "knowledge_base_search" in result
+        assert "relevant passages" in result.lower()

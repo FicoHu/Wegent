@@ -133,6 +133,29 @@ class TestExtractSkillMcpToList:
         result = TaskRequestBuilder._extract_skill_mcp_to_list(configs)
         assert result == []
 
+    def test_selected_kb_skill_keeps_unprefixed_server_name(self):
+        configs = [
+            {
+                "name": "wegent-knowledge",
+                "mcpServers": {
+                    "wegent-knowledge": {
+                        "type": "streamable-http",
+                        "url": "http://mcp.example.com/kb",
+                    }
+                },
+            }
+        ]
+
+        result = TaskRequestBuilder._extract_skill_mcp_to_list(configs)
+
+        assert result == [
+            {
+                "name": "wegent-knowledge",
+                "type": "streamable-http",
+                "url": "http://mcp.example.com/kb",
+            }
+        ]
+
 
 class TestNormalizeMcpTypesForClaudeCode:
     """Tests for _normalize_mcp_types_for_claude_code static method."""
@@ -429,7 +452,7 @@ class TestResolveRequestPreloadSkills:
         assert "wegent-knowledge" in result.bot[0]["skills"]
         assert result.bot[0]["mcp_servers"] == [
             {
-                "name": "wegent-knowledge_wegent-knowledge",
+                "name": "wegent-knowledge",
                 "type": "http",
                 "url": "${{backend_url}}/mcp/knowledge/sse",
             }

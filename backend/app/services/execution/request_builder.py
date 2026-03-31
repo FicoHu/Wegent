@@ -1745,7 +1745,9 @@ class TaskRequestBuilder:
         """Extract MCP servers from skill configs in list format.
 
         Each skill may declare mcpServers in dict format. This converts them
-        to list format with prefixed names to avoid cross-skill conflicts.
+        to list format. When the skill name already matches the server name,
+        keep the bare server name so tool calls can reference the natural MCP
+        server identifier without an extra prefix.
 
         Args:
             skill_configs: List of resolved skill config dicts
@@ -1767,8 +1769,13 @@ class TaskRequestBuilder:
             for server_name, server_config in mcp_servers.items():
                 if not isinstance(server_config, dict):
                     continue
+                resolved_name = (
+                    server_name
+                    if skill_name == server_name
+                    else f"{skill_name}_{server_name}"
+                )
                 entry = {
-                    "name": f"{skill_name}_{server_name}",
+                    "name": resolved_name,
                     **server_config,
                 }
                 result.append(entry)

@@ -7,7 +7,7 @@
 import importlib
 import json
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -105,3 +105,226 @@ class TestSilentExitMarkerDetection:
             is_silent = False
 
         assert is_silent is False
+
+
+class TestKnowledgeTools:
+    """Tests for knowledge MCP tools."""
+
+    def test_list_documents_uses_shared_user_lookup(self):
+        """list_documents should use the shared token-to-user helper."""
+        from app.mcp_server.tools import knowledge as knowledge_tools
+
+        token_info = TaskTokenInfo(
+            task_id=1,
+            subtask_id=2,
+            user_id=3,
+            user_name="testuser",
+        )
+        mock_db = MagicMock()
+        mock_user = MagicMock()
+        mock_document = MagicMock()
+        mock_document.model_dump.return_value = {"id": 52, "name": "AI Analysis"}
+        mock_result = MagicMock(total=1, items=[mock_document])
+
+        with (
+            patch.object(knowledge_tools, "SessionLocal", return_value=mock_db),
+            patch.object(
+                knowledge_tools, "get_user_from_token", return_value=mock_user
+            ),
+            patch.object(
+                knowledge_tools.knowledge_orchestrator,
+                "list_documents",
+                return_value=mock_result,
+            ),
+        ):
+            result = knowledge_tools.list_documents(token_info, knowledge_base_id=1493)
+
+        assert result == {
+            "total": 1,
+            "items": [{"id": 52, "name": "AI Analysis"}],
+        }
+
+    def test_read_document_returns_content_with_pagination_metadata(self):
+        """read_document should return content via structured parameters."""
+        from app.mcp_server.tools import knowledge as knowledge_tools
+
+        token_info = TaskTokenInfo(
+            task_id=1,
+            subtask_id=2,
+            user_id=3,
+            user_name="testuser",
+        )
+        mock_db = MagicMock()
+        mock_user = MagicMock()
+        mock_user.id = 3
+
+        with (
+            patch.object(knowledge_tools, "SessionLocal", return_value=mock_db),
+            patch.object(
+                knowledge_tools, "get_user_from_token", return_value=mock_user
+            ),
+            patch.object(
+                knowledge_tools.document_read_service,
+                "read_documents",
+                return_value=[
+                    {
+                        "id": 52,
+                        "name": "AI Analysis",
+                        "content": "DeepSeek and Doubao were the main players.",
+                        "total_length": 44,
+                        "offset": 0,
+                        "returned_length": 44,
+                        "has_more": False,
+                        "kb_id": 1493,
+                    }
+                ],
+            ),
+        ):
+            result = knowledge_tools.read_document(
+                token_info,
+                knowledge_base_id=1493,
+                document_id=52,
+            )
+
+        assert result == {
+            "document_id": 52,
+            "name": "AI Analysis",
+            "content": "DeepSeek and Doubao were the main players.",
+            "total_length": 44,
+            "offset": 0,
+            "returned_length": 44,
+            "has_more": False,
+            "kb_id": 1493,
+        }
+
+    def test_knowledge_base_search_alias_returns_chunk_matches(self):
+        """knowledge_base_search should expose the same MCP search behavior."""
+        from app.mcp_server.tools import knowledge as knowledge_tools
+
+        token_info = TaskTokenInfo(
+            task_id=1,
+            subtask_id=2,
+            user_id=3,
+            user_name="testuser",
+        )
+        mock_db = MagicMock()
+        mock_user = MagicMock()
+        mock_user.id = 3
+        mock_user.user_name = "testuser"
+
+        with (
+            patch.object(knowledge_tools, "SessionLocal", return_value=mock_db),
+            patch.object(
+                knowledge_tools, "get_user_from_token", return_value=mock_user
+            ),
+            patch.object(
+                knowledge_tools.RetrievalService,
+                "retrieve_for_chat_shell",
+                new=AsyncMock(
+                    return_value={
+                        "mode": "rag_retrieval",
+                        "records": [
+                            {
+                                "content": "Holiday AI competition analysis.",
+                                "score": 0.93,
+                                "title": "AI Holiday Review",
+                                "metadata": {
+                                    "doc_ref": "52",
+                                    "chunk_id": 3,
+                                },
+                                "knowledge_base_id": 1493,
+                            }
+                        ],
+                        "total": 1,
+                    }
+                ),
+            ),
+        ):
+            result = knowledge_tools.knowledge_base_search(
+                token_info,
+                knowledge_base_id=1493,
+                query="AI competition",
+                max_results=4,
+                document_ids=[52],
+            )
+
+        assert result == {
+            "mode": "rag_retrieval",
+            "total": 1,
+            "items": [
+                {
+                    "document_id": 52,
+                    "document_name": "AI Holiday Review",
+                    "chunk_id": 3,
+                    "content": "Holiday AI competition analysis.",
+                    "score": 0.93,
+                    "kb_id": 1493,
+                }
+            ],
+        }
+
+    @pytest.mark.asyncio
+    async def test_knowledge_base_search_works_inside_running_event_loop(self):
+        """knowledge_base_search should work even when an event loop is already running."""
+        from app.mcp_server.tools import knowledge as knowledge_tools
+
+        token_info = TaskTokenInfo(
+            task_id=1,
+            subtask_id=2,
+            user_id=3,
+            user_name="testuser",
+        )
+        mock_db = MagicMock()
+        mock_user = MagicMock()
+        mock_user.id = 3
+        mock_user.user_name = "testuser"
+
+        with (
+            patch.object(knowledge_tools, "SessionLocal", return_value=mock_db),
+            patch.object(
+                knowledge_tools, "get_user_from_token", return_value=mock_user
+            ),
+            patch.object(
+                knowledge_tools.RetrievalService,
+                "retrieve_for_chat_shell",
+                new=AsyncMock(
+                    return_value={
+                        "mode": "rag_retrieval",
+                        "records": [
+                            {
+                                "content": "Chunk content from KB.",
+                                "score": 0.88,
+                                "title": "AI Competition",
+                                "metadata": {
+                                    "doc_ref": "52",
+                                    "chunk_id": 9,
+                                },
+                                "knowledge_base_id": 1493,
+                            }
+                        ],
+                        "total": 1,
+                    }
+                ),
+            ),
+        ):
+            result = knowledge_tools.knowledge_base_search(
+                token_info,
+                knowledge_base_id=1493,
+                query="AI competition",
+                max_results=3,
+            )
+
+        assert result == {
+            "mode": "rag_retrieval",
+            "total": 1,
+            "items": [
+                {
+                    "document_id": 52,
+                    "document_name": "AI Competition",
+                    "chunk_id": 9,
+                    "content": "Chunk content from KB.",
+                    "score": 0.88,
+                    "kb_id": 1493,
+                }
+            ],
+        }
