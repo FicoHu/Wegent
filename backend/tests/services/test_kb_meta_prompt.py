@@ -37,12 +37,13 @@ class TestKbMetaFormatter:
             ]
         )
 
-        assert "Available Knowledge Bases" in prompt
+        assert "Knowledge Bases In Scope" in prompt
         assert "KB Name: KB1" in prompt
         assert "KB ID: 1" in prompt
         assert "Summary: S1" in prompt
         assert "Topics: t1, t2" in prompt
         assert "KB Name: KB2" in prompt
+        assert "request-scoped metadata only" in prompt
 
     def test_format_kb_meta_prompt_marks_single_selected_kb_as_target(self):
         from app.services.chat.preprocessing.kb_meta import format_kb_meta_prompt
@@ -58,13 +59,13 @@ class TestKbMetaFormatter:
             ]
         )
 
-        assert "Current Request Target KB" in prompt
-        assert "222" in prompt
-        assert "1408" in prompt
-        assert "Do not call list_knowledge_bases" in prompt
-        assert "Use only KB ID: 1408" in prompt
-        assert "For upload/save requests, call create_document directly" in prompt
-        assert "Do not ask clarifying questions about which knowledge base" in prompt
+        assert "Current Target KB" in prompt
+        assert "KB Name: 222" in prompt
+        assert "KB ID: 1408" in prompt
+        assert "request-scoped metadata only" in prompt
+        assert "create_document" not in prompt
+        assert "list_knowledge_bases" not in prompt
+        assert "clarifying questions" not in prompt
 
     def test_select_kb_summary_text_prefers_long_for_small_list(self):
         from app.services.chat.preprocessing.kb_meta import select_kb_summary_text
@@ -109,3 +110,6 @@ class TestKbMetaFormatter:
         assert "Topics:" not in prompt
         assert "Routing Hint: S1" in prompt
         assert "Routing Keywords: t1, t2" in prompt
+        assert "retrieval guidance only" in prompt
+        assert "document structure" not in prompt
+        assert "high-level analysis" not in prompt

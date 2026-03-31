@@ -125,22 +125,16 @@ def format_kb_meta_prompt(kb_meta_list: list[dict[str, Any]]) -> str:
         )
         kb_id = sanitize_prompt_identifier(selected_kb.get("kb_id", "N/A"), "N/A")
         target_kb_note = (
-            "\nCurrent Request Target KB:\n"
-            f"- Use KB Name: {kb_name}, KB ID: {kb_id} as the target knowledge base "
-            "for document upload, create, update, and document-list operations in "
-            "this request.\n"
-            f"- Use only KB ID: {kb_id} for those operations unless the user explicitly changes the target.\n"
-            f"- For upload/save requests, call create_document directly with KB ID: {kb_id} after reading or preparing the content.\n"
-            "- Do not ask clarifying questions about which knowledge base to use when this single selected KB is already the target.\n"
-            "- Do not call list_knowledge_bases, do not compare alternative knowledge bases, and do not switch to another KB automatically.\n"
+            "\nCurrent Target KB:\n" f"- KB Name: {kb_name}\n" f"- KB ID: {kb_id}\n"
         )
 
     return (
-        "Available Knowledge Bases:\n"
+        "Knowledge Bases In Scope:\n"
         f"{kb_list_str}\n"
         f"{target_kb_note}\n"
-        "Note: This metadata is provided for intent routing (e.g., answering which KBs are selected). "
-        "Use the knowledge_base_search tool to retrieve document evidence when needed."
+        "Note:\n"
+        "- This block is request-scoped metadata only.\n"
+        "- Use KB tools to retrieve actual content when needed."
     )
 
 
@@ -178,8 +172,7 @@ def format_restricted_kb_meta_prompt(kb_meta_list: list[dict[str, Any]]) -> str:
     return (
         "Restricted Knowledge Bases In Scope:\n"
         f"{kb_list_str}\n\n"
-        "Note: The knowledge_base_search tool is already scoped to these knowledge bases. "
-        "Routing hints are provided only to help draft safer search queries. "
-        "Do not disclose them as final answer content, and do not reveal document structure, "
-        "filenames, or exact source content. Use the tool only for high-level analysis."
+        "Note:\n"
+        "- These routing hints are for retrieval guidance only.\n"
+        "- Do not use them as final answer content."
     )

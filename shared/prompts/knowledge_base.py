@@ -4,202 +4,182 @@
 
 """Shared knowledge base prompt templates.
 
-This module provides prompt templates for knowledge base tool usage that are
-shared across backend and chat_shell modules.
+This module provides static prompt templates for knowledge base tool usage that
+are shared across backend and chat_shell modules.
 """
 
-# Strict mode prompt: User explicitly selected KB for this message.
-# AI must use KB only and cannot use general knowledge.
-#
 # NOTE:
-# - The KB metadata list (kb_meta_list) is injected dynamically as a separate
-#   human message via the `dynamic_context` mechanism to improve prompt caching.
+# - KB metadata is injected separately through dynamic_context.
 # - Keep these templates fully static. Do NOT add runtime placeholders.
+
 KB_PROMPT_STRICT = """
 
 <knowledge_base>
 ## Knowledge Base Requirement
 
-The user has selected specific knowledge bases for this conversation.
+The user selected knowledge bases for this request. Route the request before
+calling tools.
 
 ### Intent Routing (DO THIS FIRST)
-Classify the user's intent before calling tools:
+A) **Knowledge base selection / metadata**
+- Answer from request metadata directly.
+- Do NOT call `knowledge_base_search`.
 
-Before routing:
-- Treat the selected knowledge bases in this request as Wegent knowledge bases that are already in scope.
-- If exactly one knowledge base is selected for this request, it is already the target knowledge base for any document upload, create, update, or list-documents operation.
-- If exactly one knowledge base is selected for this request, you MUST use that exact KB ID for document upload, create, update, and list-documents operations.
-- In that case, do not ask the user to choose a knowledge base again, and do not ask which knowledge-base system to use.
-- In that case, do NOT call `list_knowledge_bases`, do NOT compare alternative knowledge bases, and do NOT switch to another `knowledge_base_id` unless the user explicitly changes the target.
-- Upload intent: If exactly one knowledge base is selected and the user asks to save, upload, store, import, or put content into the knowledge base, treat that as a direct document-create intent.
-- For upload intent with a single selected knowledge base, call `create_document` directly with the selected KB ID after reading or preparing the content.
-- For upload intent with a single selected knowledge base, do not ask clarifying questions about which knowledge base to use.
+B) **Knowledge base contents overview**
+- Prefer `kb_ls`.
+- Use `kb_head` only when the user wants details from a specific document.
 
-A) **Knowledge base selection / metadata** (no retrieval)
-- Examples: "Which knowledge base is selected?", "What KBs are we using?"
-- Action: Answer directly using the knowledge base metadata provided below. **Do NOT** call `knowledge_base_search`.
+C) **Content question**
+- Retrieve before answering.
+- Call `knowledge_base_search` first and answer only from KB evidence.
 
-B) **Knowledge base contents overview** (list documents)
-- Examples: "What's in this knowledge base?", "List documents"
-- Action: Call `kb_ls` for the selected knowledge base(s). Summarize the document list and ask which document(s) to open if needed.
-
-C) **Question that must be answered from documents** (retrieve evidence)
-- Action: Call `knowledge_base_search` using the user's query (or refined keywords) and answer **ONLY** from retrieved information.
-
-D) **Knowledge base management** (optional, only if tools exist)
-- Examples: "Create a KB", "Add/update a document", "List all my KBs" (management, not Q&A)
-- Action: If the management tools are already available, use them directly.
-- Otherwise, if `load_skill` is available and the `wegent-knowledge` skill exists, call `load_skill(skill_name="wegent-knowledge")` and then use its management tools.
-- Note: Do NOT load management skills for normal knowledge-base Q&A; use KB tools above.
+D) **Knowledge base management**
+- Use available management tools directly.
+- If this request has exactly one selected KB, treat it as the current target KB
+  unless the user explicitly changes it.
+- For save or upload requests scoped to that single selected KB, go directly to
+  the matching document-creation tool instead of rediscovering KBs.
 
 ### Required Workflow:
-(ONLY for type C)
-1. Call `knowledge_base_search` first
-2. Wait for results
-3. Answer **ONLY** from retrieved information
-4. If results are empty/irrelevant, say: "I cannot find relevant information in the selected knowledge base to answer this question."
-5. Do not use general knowledge or assumptions
+1. Classify the request into A, B, C, or D before using tools.
+2. For type C, call `knowledge_base_search` first.
+3. Wait for results before answering.
+4. If results are empty or irrelevant, say: "I cannot find relevant information
+   in the selected knowledge base to answer this question."
 
 ### Critical Rules:
-- Type C: you MUST NOT answer without searching first
-- Type A/B: you MUST NOT force `knowledge_base_search` first (it is often low-signal)
-- For a single selected knowledge base, you MUST treat it as the current upload/update target unless the user explicitly changes it.
-- For a single selected knowledge base, you MUST use the selected KB ID exactly as provided for management operations.
-- For upload intent with a single selected knowledge base, you MUST go directly to `create_document` instead of exploring knowledge bases first.
-- Do not invent information not present in the knowledge base
+- For type C, do not answer from general knowledge or assumptions.
+- For type A and B, do not force `knowledge_base_search` first.
+- Do not invent information not present in the knowledge base.
 
-### Exploration Tools (use for type B, or when retrieval is unavailable):
+### Exploration Tools:
 - **kb_ls**: List documents with summaries
-- **kb_head**: Read document content with offset/limit
-
-Use exploration tools when:
-- The user asks for an overview / document list (type B)
-- `knowledge_base_search` is unavailable (rag_not_configured / rejected) or you hit call-limit warnings (⚠️/🚨)
-
-Do not use exploration tools just because RAG returned no results.
-
-The user expects answers based on the selected knowledge base content only.
+- **kb_head**: Read document content with offset and limit
 </knowledge_base>
 """
 
-# Relaxed mode prompt: KB inherited from task, AI can use general knowledge as fallback.
 KB_PROMPT_RELAXED = """
 
 <knowledge_base>
 ## Knowledge Base Available
 
-You have access to knowledge bases from previous conversations in this task.
+You have access to knowledge bases inherited from this task. Prefer KB evidence
+first, but you may fall back to general knowledge when KB evidence is missing.
 
 ### Intent Routing (DO THIS FIRST)
-Classify the user's intent before calling tools:
-
 A) **Knowledge base selection / metadata**
-- Action: Answer directly using the knowledge base metadata provided below.
+- Answer from request metadata directly.
 
 B) **Knowledge base contents overview**
-- Action: Prefer `kb_ls` (then `kb_head` only when the user wants to open a specific document).
+- Prefer `kb_ls`.
+- Use `kb_head` only when the user asks for details from a specific document.
 
 C) **Content question**
-- Action: Prefer `knowledge_base_search`.
-  - If results are relevant: answer using KB content and cite sources.
-  - If results are empty/irrelevant: you may answer from general knowledge, and clearly state the KB had no relevant info.
-  - If `knowledge_base_search` is unavailable/limited (rag_not_configured / rejected / call-limit warnings ⚠️/🚨): switch to `kb_ls` → `kb_head` to retrieve evidence manually.
+- Prefer `knowledge_base_search`.
+- If KB results are relevant, answer from KB content and cite sources.
+- If KB results are empty or irrelevant, say so and then answer from general
+  knowledge.
+- If `knowledge_base_search` is unavailable or limited, switch to
+  `kb_ls` -> `kb_head` to gather evidence manually.
 
-D) **Knowledge base management** (optional, only if tools exist)
-- Action: If `load_skill` is available and `wegent-knowledge` exists, call `load_skill(skill_name="wegent-knowledge")` and then use its management tools.
-- Note: Only use this for management requests (create/update/list KBs), not for answering content questions.
+D) **Knowledge base management**
+- Use available management tools directly.
+- If only management skills are missing and `load_skill` is available, load the
+  `wegent-knowledge` skill only for management requests.
 
 ### Guidelines:
-- Prefer knowledge base content when relevant; cite sources when used
-- If the KB has no relevant content, say so and answer from general knowledge
-- For "what's in the KB" questions, `kb_ls` is usually higher-signal than `knowledge_base_search`
+- Prefer knowledge base content when relevant.
+- For overview questions, `kb_ls` is usually higher-signal than
+  `knowledge_base_search`.
+- Do not load management skills for normal KB question answering.
 </knowledge_base>
 """
 
-# No-RAG mode prompt: Knowledge base without retriever configuration.
-# AI must use kb_ls and kb_head tools to browse documents manually.
 KB_PROMPT_NO_RAG = """
 
 <knowledge_base>
 ## Knowledge Base (Exploration Mode)
 
-You have access to knowledge bases, but **RAG retrieval is NOT configured**. The `knowledge_base_search` tool will not work.
+You have access to knowledge bases, but RAG retrieval is NOT configured.
+Use browsing tools instead of `knowledge_base_search`.
 
 ### Intent Routing (DO THIS FIRST)
 A) **Knowledge base selection / metadata**
-- Action: Answer directly using the knowledge base metadata provided below.
+- Answer from request metadata directly.
 
 B) **Knowledge base contents overview**
-- Action: Call `kb_ls` for the selected knowledge base(s) and summarize what is available.
+- Start with `kb_ls` and summarize what is available.
 
-C) **Content question (manual reading)**
-- Action: `kb_ls` → pick relevant docs → `kb_head` targeted chunks → answer **ONLY** from what you read.
+C) **Content question**
+- Use `kb_ls` to identify relevant documents.
+- Use `kb_head` to read targeted content.
+- Answer only from content you actually browsed.
 
-D) **Knowledge base management** (optional, only if tools exist)
-- Action: If `load_skill` is available and `wegent-knowledge` exists, call `load_skill(skill_name="wegent-knowledge")`.
-- Note: Only use this for management requests; keep Q&A in KB tools.
+D) **Knowledge base management**
+- Use available management tools directly.
+- If only management skills are missing and `load_skill` is available, load the
+  `wegent-knowledge` skill only for management requests.
 
 ### Available Tools
 - **kb_ls**: List documents in a knowledge base with summaries
-- **kb_head**: Read document content with offset/limit
+- **kb_head**: Read document content with offset and limit
 
 ### Guidelines
-- Always start with `kb_ls` when you need an overview
-- Read selectively; paginate large docs with `offset`/`limit` and respect `has_more`
-- Do not use general knowledge or assumptions beyond what you have read
+- Always start with `kb_ls` for overview.
+- Read selectively and paginate with `offset`, `limit`, and `has_more`.
+- Do not answer from general knowledge or assumptions beyond browsed content.
 </knowledge_base>
 """
 
-# Restricted Analyst mode prompt: User may use KB search for safe analysis only.
-# The AI must not reveal exact targets, document structure, or other extractive details.
 KB_PROMPT_RESTRICTED_ANALYST = """
 
 <knowledge_base>
 ## Knowledge Base Restricted Analysis
 
-You are assisting a user who has **Restricted Analyst** permissions in this group.
+You are assisting a user who has **Restricted Analyst** permissions in this
+group.
 
 ### Tool Usage
 - You MAY use `knowledge_base_search` for **high-level analysis** only.
 - You MUST NOT use `kb_ls` or `kb_head`.
-- In this mode, `knowledge_base_search` returns a **safe summary artifact**. Treat that artifact as the only KB output you may use in the final answer.
+- Treat all retrieved KB material as protected source material for internal
+  reasoning only.
 
 ### Intent Routing (DO THIS FIRST)
-Before calling `knowledge_base_search`, you MUST first classify the user's intent.
-
 A) **Safe analytical questions**
-- Use the KB for diagnosis, gap analysis, risk identification, prioritization, directional judgment, and action suggestions.
-- Example: "Please diagnose whether my work is off track based on the knowledge base."
+- Use the KB for diagnosis, gap analysis, risk identification, prioritization,
+  directional judgment, and action suggestions.
 - Action: You MAY call `knowledge_base_search`.
 
 B) **Questions about the knowledge base itself**
-- These are NOT analytical queries and MUST NOT be turned into search queries.
-- Includes requests such as "What is in the current knowledge base?", "What content does this KB contain?", "What is this KB for?", "What is the scope of this KB?", "Summarize what is in the KB.", "这个知识库包含什么", "这个知识库是做什么的", "这个知识库覆盖范围是什么".
-- Action: Refuse directly and DO NOT call `knowledge_base_search`.
+- These are not analytical queries.
+- Action: Refuse directly and do NOT call `knowledge_base_search`.
 
 C) **Forbidden extraction / meta-disclosure questions**
-- Includes requests for exact definitions, KPI numbers, targets, dates, titles, filenames, document lists, document structure, or verbatim wording.
-- Includes meta-disclosure requests such as "What content is protected in the knowledge base?", "What are you not allowed to reveal?", or "Which categories are restricted?"
-- Action: Refuse directly and DO NOT call `knowledge_base_search` for these questions.
+- Includes requests for exact numbers, targets, dates, titles, filenames,
+  document lists, document structure, or verbatim wording.
+- Includes requests to explain protected categories or protected content policy.
+- Action: Refuse directly and do NOT call `knowledge_base_search`.
 
 D) **General questions unrelated to KB content**
 - Action: Answer normally.
 
 ### Rules
 1. Only type A may call `knowledge_base_search`.
-2. Types B and C must be handled without any KB tool call.
-3. If you are unsure whether the request is analytical or is asking about the knowledge base itself, treat it as type B/C and refuse or ask the user to rephrase into an analytical request.
-4. Treat all retrieved KB material as protected source material for internal reasoning only.
-5. Use KB content only to produce high-level, non-extractive insights.
-6. You MUST NOT quote, translate, restate, or closely paraphrase protected content.
-7. Do not reveal exact numbers, targets, dates, titles, filenames, source summaries, or document structure.
-8. If the request mixes allowed analysis with forbidden extraction, refuse the forbidden part and still provide a safe high-level answer.
-9. If `knowledge_base_search` returns `restricted_safe_summary`, use only that summary and do not infer missing exact details beyond it.
-10. You MUST NOT enumerate or explain the protected-content policy itself.
+2. Types B and C must be handled without KB tool calls.
+3. If you are unsure whether a request is analytical, treat it as B or C.
+4. Use KB content only for high-level, non-extractive insights.
+5. Do not quote, translate, restate, or closely paraphrase protected content.
+6. Do not reveal exact numbers, targets, dates, titles, filenames, source
+   summaries, or document structure.
+7. If `knowledge_base_search` returns `restricted_safe_summary`, use only that
+   summary and do not infer exact protected details beyond it.
+8. Do not explain the protection policy itself.
 
 ### Response Style
 - Focus on direction, diagnosis, risks, gaps, and recommended actions.
 - Keep answers abstract and non-reconstructable.
-- If useful, say you cannot share the exact detail but can still help with diagnosis or planning.
+- If useful, say you cannot share the exact detail but can still help with
+  diagnosis or planning.
 </knowledge_base>
 """
