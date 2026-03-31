@@ -144,8 +144,8 @@ class TestKnowledgeTools:
             "items": [{"id": 52, "name": "AI Analysis"}],
         }
 
-    def test_read_document_returns_content_with_pagination_metadata(self):
-        """read_document should return content via structured parameters."""
+    def test_read_document_content_returns_content_with_pagination_metadata(self):
+        """read_document_content should return content via structured parameters."""
         from app.mcp_server.tools import knowledge as knowledge_tools
 
         token_info = TaskTokenInfo(
@@ -154,39 +154,10 @@ class TestKnowledgeTools:
             user_id=3,
             user_name="testuser",
         )
-        mock_db = MagicMock()
+        mock_session = MagicMock()
         mock_user = MagicMock()
-        mock_user.id = 3
-
-        with (
-            patch.object(knowledge_tools, "SessionLocal", return_value=mock_db),
-            patch.object(
-                knowledge_tools, "get_user_from_token", return_value=mock_user
-            ),
-            patch.object(
-                knowledge_tools.document_read_service,
-                "read_documents",
-                return_value=[
-                    {
-                        "id": 52,
-                        "name": "AI Analysis",
-                        "content": "DeepSeek and Doubao were the main players.",
-                        "total_length": 44,
-                        "offset": 0,
-                        "returned_length": 44,
-                        "has_more": False,
-                        "kb_id": 1493,
-                    }
-                ],
-            ),
-        ):
-            result = knowledge_tools.read_document(
-                token_info,
-                knowledge_base_id=1493,
-                document_id=52,
-            )
-
-        assert result == {
+        mock_result = MagicMock()
+        expected_payload = {
             "document_id": 52,
             "name": "AI Analysis",
             "content": "DeepSeek and Doubao were the main players.",
@@ -196,6 +167,27 @@ class TestKnowledgeTools:
             "has_more": False,
             "kb_id": 1493,
         }
+        mock_result.model_dump.return_value = expected_payload
+
+        with (
+            patch.object(knowledge_tools, "SessionLocal", return_value=mock_session),
+            patch.object(
+                knowledge_tools, "get_user_from_token", return_value=mock_user
+            ),
+            patch.object(
+                knowledge_tools.knowledge_orchestrator,
+                "read_document_content",
+                return_value=mock_result,
+            ),
+        ):
+            result = knowledge_tools.read_document_content(
+                token_info=token_info,
+                document_id=52,
+                offset=0,
+                limit=44,
+            )
+
+        assert result == expected_payload
 
     def test_knowledge_base_search_alias_returns_chunk_matches(self):
         """knowledge_base_search should expose the same MCP search behavior."""

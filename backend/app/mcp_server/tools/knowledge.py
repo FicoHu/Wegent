@@ -28,8 +28,10 @@ from app.db.session import SessionLocal
 from app.mcp_server.auth import TaskTokenInfo
 from app.mcp_server.knowledge_access import get_user_from_token
 from app.mcp_server.tools.decorator import build_mcp_tools_dict, mcp_tool
-from app.services.knowledge.orchestrator import knowledge_orchestrator
-from app.services.rag.document_read_service import document_read_service
+from app.services.knowledge.orchestrator import (
+    MAX_DOCUMENT_READ_LIMIT,
+    knowledge_orchestrator,
+)
 from app.services.rag.retrieval_service import RetrievalService
 
 logger = logging.getLogger(__name__)
@@ -279,35 +281,32 @@ def list_documents(
 
 
 @mcp_tool(
-    name="read_document",
-    description="Read document content from a knowledge base using structured parameters instead of a resource URI.",
+    name="read_document_content",
+    description="Read document content with offset/limit pagination.",
     server="knowledge",
     param_descriptions={
-        "knowledge_base_id": "Knowledge base ID that owns the document",
         "document_id": "Document ID to read",
-        "offset": "Content offset for partial reads (default: 0)",
-        "limit": "Maximum characters to read (default: 4000)",
+        "offset": "Character offset to start reading from",
+        "limit": "Maximum number of characters to return",
     },
 )
-def read_document(
+def read_document_content(
     token_info: TaskTokenInfo,
-    knowledge_base_id: int,
     document_id: int,
     offset: int = 0,
-    limit: int = 4000,
+    limit: int = MAX_DOCUMENT_READ_LIMIT,
 ) -> Dict[str, Any]:
     """
-    Read a document with optional pagination.
+    Read raw document content with offset/limit pagination.
 
     Args:
         token_info: Task token information containing user context
-        knowledge_base_id: Knowledge base ID that owns the document
-        document_id: Document ID to read
-        offset: Content offset for partial reads
-        limit: Maximum characters to read
+        document_id: Document ID
+        offset: Character offset to start reading from
+        limit: Maximum number of characters to return (defaults to backend limit)
 
     Returns:
-        Dict with document content and pagination metadata
+        Dict with document content slice and pagination metadata
     """
     db = SessionLocal()
     try:
@@ -315,40 +314,21 @@ def read_document(
         if not user:
             return {"error": "User not found"}
 
-        results = document_read_service.read_documents(
+        result = knowledge_orchestrator.read_document_content(
             db=db,
-            document_ids=[document_id],
+            user=user,
+            document_id=document_id,
             offset=offset,
             limit=limit,
-            knowledge_base_ids=[knowledge_base_id],
-            user_subtask_id=token_info.subtask_id,
-            user_id=user.id,
         )
-
-        if not results:
-            return {"error": "Document not found"}
-
-        result = results[0]
-        if result.get("error"):
-            return {"error": result["error"]}
-
-        return {
-            "document_id": result["id"],
-            "name": result.get("name", ""),
-            "content": result.get("content", ""),
-            "total_length": result.get("total_length", 0),
-            "offset": result.get("offset", 0),
-            "returned_length": result.get("returned_length", 0),
-            "has_more": result.get("has_more", False),
-            "kb_id": result.get("kb_id"),
-        }
+        return result.model_dump()
 
     except ValueError as e:
-        logger.warning(f"[MCP] read_document validation error: {e}")
+        logger.warning(f"[MCP] read_document_content validation error: {e}")
         return {"error": str(e)}
 
     except Exception as e:
-        logger.error(f"[MCP] read_document error: {e}", exc_info=True)
+        logger.error(f"[MCP] read_document_content error: {e}", exc_info=True)
         return {"error": str(e)}
 
     finally:
