@@ -5,6 +5,7 @@
 """Tests for MCP Server tools."""
 
 import importlib
+import inspect
 import json
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -18,6 +19,14 @@ def get_silent_exit_module():
     """Get the silent_exit module, handling import caching issues."""
     module_name = "app.mcp_server.tools.silent_exit"
     # Force import the module directly
+    if module_name not in sys.modules:
+        importlib.import_module(module_name)
+    return sys.modules[module_name]
+
+
+def get_knowledge_module():
+    """Get the knowledge module, handling import caching issues."""
+    module_name = "app.mcp_server.tools.knowledge"
     if module_name not in sys.modules:
         importlib.import_module(module_name)
     return sys.modules[module_name]
@@ -107,12 +116,12 @@ class TestSilentExitMarkerDetection:
         assert is_silent is False
 
 
-class TestKnowledgeTools:
+class TestKnowledgeTool:
     """Tests for knowledge MCP tools."""
 
     def test_list_documents_uses_shared_user_lookup(self):
         """list_documents should use the shared token-to-user helper."""
-        from app.mcp_server.tools import knowledge as knowledge_tools
+        module = get_knowledge_module()
 
         token_info = TaskTokenInfo(
             task_id=1,
@@ -127,71 +136,155 @@ class TestKnowledgeTools:
         mock_result = MagicMock(total=1, items=[mock_document])
 
         with (
-            patch.object(knowledge_tools, "SessionLocal", return_value=mock_db),
+            patch.object(module, "SessionLocal", return_value=mock_db),
+            patch.object(module, "get_user_from_token", return_value=mock_user),
             patch.object(
-                knowledge_tools, "get_user_from_token", return_value=mock_user
-            ),
-            patch.object(
-                knowledge_tools.knowledge_orchestrator,
+                module.knowledge_orchestrator,
                 "list_documents",
                 return_value=mock_result,
             ),
         ):
-            result = knowledge_tools.list_documents(token_info, knowledge_base_id=1493)
+            result = module.list_documents(token_info, knowledge_base_id=1493)
 
         assert result == {
             "total": 1,
             "items": [{"id": 52, "name": "AI Analysis"}],
         }
 
-    def test_read_document_content_returns_content_with_pagination_metadata(self):
-        """read_document_content should return content via structured parameters."""
-        from app.mcp_server.tools import knowledge as knowledge_tools
-
+    def test_read_document_content_returns_orchestrator_payload(self):
+        """Test that read_document_content returns the orchestrator payload."""
+        module = get_knowledge_module()
         token_info = TaskTokenInfo(
             task_id=1,
             subtask_id=2,
             user_id=3,
-            user_name="testuser",
+            user_name="alice",
         )
+        mock_user = object()
         mock_session = MagicMock()
-        mock_user = MagicMock()
-        mock_result = MagicMock()
+        mock_result = MagicMock(
+            document_id=9,
+            name="roadmap",
+            content="abcd",
+            total_length=10,
+            offset=0,
+            returned_length=4,
+            has_more=True,
+            kb_id=77,
+        )
         expected_payload = {
-            "document_id": 52,
-            "name": "AI Analysis",
-            "content": "DeepSeek and Doubao were the main players.",
-            "total_length": 44,
+            "document_id": 9,
+            "name": "roadmap",
+            "content": "abcd",
+            "total_length": 10,
             "offset": 0,
-            "returned_length": 44,
-            "has_more": False,
-            "kb_id": 1493,
+            "returned_length": 4,
+            "has_more": True,
+            "kb_id": 77,
         }
         mock_result.model_dump.return_value = expected_payload
 
         with (
-            patch.object(knowledge_tools, "SessionLocal", return_value=mock_session),
+            patch.object(module, "SessionLocal", return_value=mock_session),
+            patch.object(module, "_get_user_from_token", return_value=mock_user),
             patch.object(
-                knowledge_tools, "get_user_from_token", return_value=mock_user
-            ),
-            patch.object(
-                knowledge_tools.knowledge_orchestrator,
+                module.knowledge_orchestrator,
                 "read_document_content",
                 return_value=mock_result,
-            ),
+            ) as mock_read,
         ):
-            result = knowledge_tools.read_document_content(
+            result = module.read_document_content(
                 token_info=token_info,
-                document_id=52,
+                document_id=9,
                 offset=0,
-                limit=44,
+                limit=4,
             )
 
         assert result == expected_payload
+        mock_read.assert_called_once_with(
+            db=mock_session,
+            user=mock_user,
+            document_id=9,
+            offset=0,
+            limit=4,
+        )
+        mock_session.close.assert_called_once()
+
+    def test_read_document_content_returns_error_dict_for_validation_failure(self):
+        """Test that read_document_content converts validation failures to error dicts."""
+        module = get_knowledge_module()
+        token_info = TaskTokenInfo(
+            task_id=1,
+            subtask_id=2,
+            user_id=3,
+            user_name="alice",
+        )
+        mock_user = object()
+        mock_session = MagicMock()
+
+        with (
+            patch.object(module, "SessionLocal", return_value=mock_session),
+            patch.object(module, "_get_user_from_token", return_value=mock_user),
+            patch.object(
+                module.knowledge_orchestrator,
+                "read_document_content",
+                side_effect=ValueError("limit must be greater than 0"),
+            ),
+        ):
+            result = module.read_document_content(
+                token_info=token_info,
+                document_id=9,
+                offset=0,
+                limit=0,
+            )
+
+        assert result == {"error": "limit must be greater than 0"}
+        mock_session.close.assert_called_once()
+
+    def test_read_document_content_returns_error_dict_for_unexpected_failure(self):
+        """Test that read_document_content converts unexpected failures to error dicts."""
+        module = get_knowledge_module()
+        token_info = TaskTokenInfo(
+            task_id=1,
+            subtask_id=2,
+            user_id=3,
+            user_name="alice",
+        )
+        mock_user = object()
+        mock_session = MagicMock()
+
+        with (
+            patch.object(module, "SessionLocal", return_value=mock_session),
+            patch.object(module, "_get_user_from_token", return_value=mock_user),
+            patch.object(
+                module.knowledge_orchestrator,
+                "read_document_content",
+                side_effect=RuntimeError("boom"),
+            ),
+        ):
+            result = module.read_document_content(
+                token_info=token_info,
+                document_id=9,
+            )
+
+        assert result == {"error": "boom"}
+        mock_session.close.assert_called_once()
+
+    def test_read_document_content_uses_shared_default_limit_constant(self):
+        """Test that read_document_content reuses the shared default limit constant."""
+        module = get_knowledge_module()
+        target = getattr(
+            module.read_document_content,
+            "__wrapped__",
+            module.read_document_content,
+        )
+        default_limit = inspect.signature(target).parameters["limit"].default
+
+        assert default_limit == module.MAX_DOCUMENT_READ_LIMIT
 
     def test_knowledge_base_search_alias_returns_chunk_matches(self):
         """knowledge_base_search should expose the same MCP search behavior."""
-        from app.mcp_server.tools import knowledge as knowledge_tools
+        module = get_knowledge_module()
 
         token_info = TaskTokenInfo(
             task_id=1,
@@ -205,12 +298,10 @@ class TestKnowledgeTools:
         mock_user.user_name = "testuser"
 
         with (
-            patch.object(knowledge_tools, "SessionLocal", return_value=mock_db),
+            patch.object(module, "SessionLocal", return_value=mock_db),
+            patch.object(module, "get_user_from_token", return_value=mock_user),
             patch.object(
-                knowledge_tools, "get_user_from_token", return_value=mock_user
-            ),
-            patch.object(
-                knowledge_tools.RetrievalService,
+                module.RetrievalService,
                 "retrieve_for_chat_shell",
                 new=AsyncMock(
                     return_value={
@@ -232,7 +323,7 @@ class TestKnowledgeTools:
                 ),
             ),
         ):
-            result = knowledge_tools.knowledge_base_search(
+            result = module.knowledge_base_search(
                 token_info,
                 knowledge_base_id=1493,
                 query="AI competition",
@@ -258,7 +349,7 @@ class TestKnowledgeTools:
     @pytest.mark.asyncio
     async def test_knowledge_base_search_works_inside_running_event_loop(self):
         """knowledge_base_search should work even when an event loop is already running."""
-        from app.mcp_server.tools import knowledge as knowledge_tools
+        module = get_knowledge_module()
 
         token_info = TaskTokenInfo(
             task_id=1,
@@ -272,12 +363,10 @@ class TestKnowledgeTools:
         mock_user.user_name = "testuser"
 
         with (
-            patch.object(knowledge_tools, "SessionLocal", return_value=mock_db),
+            patch.object(module, "SessionLocal", return_value=mock_db),
+            patch.object(module, "get_user_from_token", return_value=mock_user),
             patch.object(
-                knowledge_tools, "get_user_from_token", return_value=mock_user
-            ),
-            patch.object(
-                knowledge_tools.RetrievalService,
+                module.RetrievalService,
                 "retrieve_for_chat_shell",
                 new=AsyncMock(
                     return_value={
@@ -299,7 +388,7 @@ class TestKnowledgeTools:
                 ),
             ),
         ):
-            result = knowledge_tools.knowledge_base_search(
+            result = module.knowledge_base_search(
                 token_info,
                 knowledge_base_id=1493,
                 query="AI competition",

@@ -24,10 +24,13 @@ import logging
 import threading
 from typing import Any, Callable, Coroutine, Dict, Optional, TypeVar
 
+from sqlalchemy.orm import Session
+
 from app.db.session import SessionLocal
 from app.mcp_server.auth import TaskTokenInfo
 from app.mcp_server.knowledge_access import get_user_from_token
 from app.mcp_server.tools.decorator import build_mcp_tools_dict, mcp_tool
+from app.models.user import User
 from app.services.knowledge.orchestrator import (
     MAX_DOCUMENT_READ_LIMIT,
     knowledge_orchestrator,
@@ -36,6 +39,11 @@ from app.services.rag.retrieval_service import RetrievalService
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
+
+
+def _get_user_from_token(db: Session, token_info: TaskTokenInfo) -> Optional[User]:
+    """Get user from token info."""
+    return db.query(User).filter(User.id == token_info.user_id).first()
 
 
 def _run_async_from_sync(
@@ -281,61 +289,6 @@ def list_documents(
 
 
 @mcp_tool(
-    name="read_document_content",
-    description="Read document content with offset/limit pagination.",
-    server="knowledge",
-    param_descriptions={
-        "document_id": "Document ID to read",
-        "offset": "Character offset to start reading from",
-        "limit": "Maximum number of characters to return",
-    },
-)
-def read_document_content(
-    token_info: TaskTokenInfo,
-    document_id: int,
-    offset: int = 0,
-    limit: int = MAX_DOCUMENT_READ_LIMIT,
-) -> Dict[str, Any]:
-    """
-    Read raw document content with offset/limit pagination.
-
-    Args:
-        token_info: Task token information containing user context
-        document_id: Document ID
-        offset: Character offset to start reading from
-        limit: Maximum number of characters to return (defaults to backend limit)
-
-    Returns:
-        Dict with document content slice and pagination metadata
-    """
-    db = SessionLocal()
-    try:
-        user = get_user_from_token(db, token_info)
-        if not user:
-            return {"error": "User not found"}
-
-        result = knowledge_orchestrator.read_document_content(
-            db=db,
-            user=user,
-            document_id=document_id,
-            offset=offset,
-            limit=limit,
-        )
-        return result.model_dump()
-
-    except ValueError as e:
-        logger.warning(f"[MCP] read_document_content validation error: {e}")
-        return {"error": str(e)}
-
-    except Exception as e:
-        logger.error(f"[MCP] read_document_content error: {e}", exc_info=True)
-        return {"error": str(e)}
-
-    finally:
-        db.close()
-
-
-@mcp_tool(
     name="knowledge_base_search",
     description="Search a knowledge base for relevant information using the same high-level tool name used in chat mode.",
     server="knowledge",
@@ -520,6 +473,62 @@ def create_document(
 
     except Exception as e:
         logger.error(f"[MCP] create_document error: {e}", exc_info=True)
+        return {"error": str(e)}
+
+    finally:
+        db.close()
+
+
+@mcp_tool(
+    name="read_document_content",
+    description="Read document content with offset/limit pagination.",
+    server="knowledge",
+    param_descriptions={
+        "document_id": "Document ID to read",
+        "offset": "Character offset to start reading from",
+        "limit": "Maximum number of characters to return",
+    },
+)
+def read_document_content(
+    token_info: TaskTokenInfo,
+    document_id: int,
+    offset: int = 0,
+    limit: int = MAX_DOCUMENT_READ_LIMIT,
+) -> Dict[str, Any]:
+    """
+    Read raw document content with offset/limit pagination.
+
+    Args:
+        token_info: Task token information containing user context
+        document_id: Document ID
+        offset: Character offset to start reading from
+        limit: Maximum number of characters to return (defaults to backend limit)
+
+    Returns:
+        Dict with document content slice and pagination metadata
+    """
+    db = SessionLocal()
+    try:
+        user = _get_user_from_token(db, token_info)
+        if not user:
+            return {"error": "User not found"}
+
+        result = knowledge_orchestrator.read_document_content(
+            db=db,
+            user=user,
+            document_id=document_id,
+            offset=offset,
+            limit=limit,
+        )
+
+        return result.model_dump()
+
+    except ValueError as e:
+        logger.warning(f"[MCP] read_document_content validation error: {e}")
+        return {"error": str(e)}
+
+    except Exception as e:
+        logger.error(f"[MCP] read_document_content error: {e}", exc_info=True)
         return {"error": str(e)}
 
     finally:
