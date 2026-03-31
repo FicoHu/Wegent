@@ -34,16 +34,16 @@ class TestKBPromptConstants:
         """KB_PROMPT_STRICT should contain strict mode instructions."""
         from shared.prompts import KB_PROMPT_STRICT
 
-        # Check for core strict-mode behavior without pinning to verbose wording
+        # Check for core strict-mode behavior without pinning to stale wording
+        strict_lower = KB_PROMPT_STRICT.lower()
         assert "knowledge_base_search" in KB_PROMPT_STRICT
         assert "Intent Routing" in KB_PROMPT_STRICT
-        assert "knowledge base selection / metadata" in KB_PROMPT_STRICT.lower()
-        assert "exactly one selected kb" in KB_PROMPT_STRICT.lower()
-        assert "current target kb" in KB_PROMPT_STRICT.lower()
-        assert "retrieve before answering" in KB_PROMPT_STRICT.lower()
-        assert "general knowledge" in KB_PROMPT_STRICT.lower()
-        assert "web search" in KB_PROMPT_STRICT.lower()
-        assert "before using web search" in KB_PROMPT_STRICT.lower()
+        assert "knowledge base selection / metadata" in strict_lower
+        assert "question that must be answered from documents" in strict_lower
+        assert "must not answer without searching first" in strict_lower
+        assert "general knowledge" in strict_lower
+        assert "selected knowledge base content only" in strict_lower
+        assert "knowledge base management" in strict_lower
 
     def test_kb_prompt_relaxed_contains_required_content(self):
         """KB_PROMPT_RELAXED should contain relaxed mode instructions."""
@@ -103,17 +103,16 @@ class TestKBPromptConstants:
         """Restricted Analyst prompt should allow safe search-only analysis."""
         from shared.prompts import KB_PROMPT_RESTRICTED_ANALYST
 
+        restricted_lower = KB_PROMPT_RESTRICTED_ANALYST.lower()
         assert "knowledge_base_search" in KB_PROMPT_RESTRICTED_ANALYST
         assert "MUST NOT use `kb_ls` or `kb_head`" in KB_PROMPT_RESTRICTED_ANALYST
         assert "high-level analysis" in KB_PROMPT_RESTRICTED_ANALYST
         assert "protected source material" in KB_PROMPT_RESTRICTED_ANALYST
         assert "Intent Routing (DO THIS FIRST)" in KB_PROMPT_RESTRICTED_ANALYST
-        assert "safe analytical questions" in KB_PROMPT_RESTRICTED_ANALYST.lower()
-        assert "Questions about the knowledge base itself" in (
-            KB_PROMPT_RESTRICTED_ANALYST
-        )
-        assert "Do not explain the protection policy itself" in (
-            KB_PROMPT_RESTRICTED_ANALYST
+        assert "safe analytical questions" in restricted_lower
+        assert "questions about the knowledge base itself" in restricted_lower
+        assert "must not enumerate or explain the protected-content policy itself" in (
+            restricted_lower
         )
 
 
