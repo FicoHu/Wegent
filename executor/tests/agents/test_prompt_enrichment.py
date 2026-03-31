@@ -9,13 +9,19 @@ class TestInjectKbMetaPrompt:
     def test_local_mode_injects_kb_meta_for_string_prompt(self):
         prompt = "Save this file to the selected knowledge base."
         kb_meta_prompt = (
-            "Available Knowledge Bases:\n"
+            "Knowledge Bases In Scope:\n"
             "- KB Name: 222, KB ID: 1408\n"
-            "Current Request Target KB:\n"
-            "- Use KB Name: 222, KB ID: 1408 as the target knowledge base."
+            "Current Target KB:\n"
+            "- KB Name: 222\n"
+            "- KB ID: 1408"
         )
 
-        result = inject_kb_meta_prompt(prompt, kb_meta_prompt, executor_mode="local")
+        result = inject_kb_meta_prompt(
+            prompt,
+            kb_meta_prompt,
+            executor_mode="local",
+            is_user_selected_kb=False,
+        )
 
         assert result.startswith("<knowledge_base_context>\n")
         assert "KB Name: 222, KB ID: 1408" in result
@@ -25,17 +31,41 @@ class TestInjectKbMetaPrompt:
         prompt = "Save this file to the selected knowledge base."
         kb_meta_prompt = "Available Knowledge Bases:\n- KB Name: 222, KB ID: 1408"
 
-        result = inject_kb_meta_prompt(prompt, kb_meta_prompt, executor_mode="docker")
+        result = inject_kb_meta_prompt(
+            prompt,
+            kb_meta_prompt,
+            executor_mode="docker",
+            is_user_selected_kb=False,
+        )
 
         assert result == prompt
 
     def test_local_mode_injects_kb_meta_for_content_block_prompt(self):
         prompt = [{"type": "input_text", "text": "Save this file."}]
-        kb_meta_prompt = "Available Knowledge Bases:\n- KB Name: 222, KB ID: 1408"
+        kb_meta_prompt = "Knowledge Bases In Scope:\n- KB Name: 222, KB ID: 1408"
 
-        result = inject_kb_meta_prompt(prompt, kb_meta_prompt, executor_mode="local")
+        result = inject_kb_meta_prompt(
+            prompt,
+            kb_meta_prompt,
+            executor_mode="local",
+            is_user_selected_kb=False,
+        )
 
         assert result[0]["type"] == "input_text"
         assert result[0]["text"].startswith("<knowledge_base_context>\n")
         assert "KB Name: 222, KB ID: 1408" in result[0]["text"]
         assert result[0]["text"].endswith("Save this file.")
+
+    def test_local_mode_prioritizes_selected_kb_before_web_search(self):
+        prompt = "Tell me about the selected knowledge base topic."
+        kb_meta_prompt = "Knowledge Bases In Scope:\n- KB Name: 222, KB ID: 1408"
+
+        result = inject_kb_meta_prompt(
+            prompt,
+            kb_meta_prompt,
+            executor_mode="local",
+            is_user_selected_kb=True,
+        )
+
+        assert "use the selected knowledge base first" in result.lower()
+        assert "before web search" in result.lower()

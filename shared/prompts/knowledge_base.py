@@ -50,6 +50,9 @@ D) **Knowledge base management**
 ### Critical Rules:
 - For type C, do not answer from general knowledge or assumptions.
 - For type A and B, do not force `knowledge_base_search` first.
+- If web search is also available, use KB tools before using web search.
+- Use web search only when the user explicitly asks for external or current web
+  information, or when KB retrieval cannot answer the request.
 - Do not invent information not present in the knowledge base.
 
 ### Exploration Tools:

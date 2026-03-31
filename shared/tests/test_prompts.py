@@ -42,6 +42,8 @@ class TestKBPromptConstants:
         assert "current target kb" in KB_PROMPT_STRICT.lower()
         assert "retrieve before answering" in KB_PROMPT_STRICT.lower()
         assert "general knowledge" in KB_PROMPT_STRICT.lower()
+        assert "web search" in KB_PROMPT_STRICT.lower()
+        assert "before using web search" in KB_PROMPT_STRICT.lower()
 
     def test_kb_prompt_relaxed_contains_required_content(self):
         """KB_PROMPT_RELAXED should contain relaxed mode instructions."""

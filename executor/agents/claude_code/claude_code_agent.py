@@ -656,6 +656,7 @@ class ClaudeCodeAgent(Agent):
                     prompt,
                     self.task_data.kb_meta_prompt,
                     executor_mode=config.EXECUTOR_MODE,
+                    is_user_selected_kb=self.task_data.is_user_selected_kb,
                 )
                 if self.task_data.kb_meta_prompt and config.EXECUTOR_MODE == "local":
                     logger.info("Injected kb_meta_prompt into ClaudeCode query prompt")
@@ -685,6 +686,7 @@ class ClaudeCodeAgent(Agent):
                         prompt,
                         self.task_data.kb_meta_prompt,
                         executor_mode=config.EXECUTOR_MODE,
+                        is_user_selected_kb=self.task_data.is_user_selected_kb,
                     )
                     if (
                         self.task_data.kb_meta_prompt
@@ -717,6 +719,7 @@ class ClaudeCodeAgent(Agent):
                         prompt,
                         self.task_data.kb_meta_prompt,
                         executor_mode=config.EXECUTOR_MODE,
+                        is_user_selected_kb=self.task_data.is_user_selected_kb,
                     )
                     if (
                         self.task_data.kb_meta_prompt
