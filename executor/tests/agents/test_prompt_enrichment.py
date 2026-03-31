@@ -85,10 +85,10 @@ class TestInjectKbMetaPrompt:
         assert "document_id" in result
         assert "offset" in result
         assert "limit" in result
-        assert "knowledge_base_search" in result
+        assert "list_documents" in result
         assert "do not construct mcp resource uris manually" in result.lower()
 
-    def test_local_mode_tells_executor_to_use_knowledge_base_search_for_relevant_passages(
+    def test_local_mode_tells_executor_to_list_documents_before_reading(
         self,
     ):
         prompt = "Find the relevant knowledge base passage."
@@ -101,5 +101,5 @@ class TestInjectKbMetaPrompt:
             is_user_selected_kb=True,
         )
 
-        assert "knowledge_base_search" in result
-        assert "relevant passages" in result.lower()
+        assert "list_documents" in result
+        assert "identify which document matters" in result.lower()

@@ -234,6 +234,7 @@ class TestKnowledgeOrchestrator:
         with patch(
             "app.services.knowledge.orchestrator.KnowledgeService"
         ) as mock_kb_service:
+            mock_kb_service.get_document.return_value = document
             mock_kb_service.get_knowledge_base.return_value = (MagicMock(id=77), True)
 
             with patch(
