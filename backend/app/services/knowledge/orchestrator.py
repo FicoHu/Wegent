@@ -661,17 +661,52 @@ class KnowledgeOrchestrator:
             items=[KnowledgeDocumentResponse.model_validate(doc) for doc in documents],
         )
 
+    def get_knowledge_base(
+        self,
+        db: Session,
+        user: User,
+        knowledge_base_id: int,
+    ) -> KnowledgeBaseResponse:
+        """
+        Get a knowledge base by ID.
+
+        Args:
+            db: Database session
+            user: Current user
+            knowledge_base_id: Knowledge base ID
+
+        Returns:
+            KnowledgeBaseResponse
+
+        Raises:
+            ValueError: If knowledge base not found or access denied
+        """
+        knowledge_base, has_access = KnowledgeService.get_knowledge_base(
+            db=db,
+            knowledge_base_id=knowledge_base_id,
+            user_id=user.id,
+        )
+
+        if not knowledge_base:
+            raise ValueError("Knowledge base not found")
+        if not has_access:
+            raise ValueError("Access denied to knowledge base")
+
+        return KnowledgeBaseResponse.from_kind(
+            knowledge_base, KnowledgeService.get_document_count(db, knowledge_base.id)
+        )
+
     def _get_document_with_access_or_raise(
         self,
         db: Session,
         user: User,
         document_id: int,
     ) -> KnowledgeDocument:
-        """Fetch a document and validate its knowledge-base level access."""
-        document = (
-            db.query(KnowledgeDocument)
-            .filter(KnowledgeDocument.id == document_id)
-            .first()
+        """Load a document and verify the user can access its knowledge base."""
+        document = KnowledgeService.get_document(
+            db=db,
+            document_id=document_id,
+            user_id=user.id,
         )
         if not document:
             raise ValueError("Document not found")
@@ -797,126 +832,6 @@ class KnowledgeOrchestrator:
             content_length=content_length,
             truncated=truncated,
             summary=summary,
-        )
-
-    def get_knowledge_base(
-        self,
-        db: Session,
-        user: User,
-        knowledge_base_id: int,
-    ) -> KnowledgeBaseResponse:
-        """
-        Get a knowledge base by ID.
-
-        Args:
-            db: Database session
-            user: Current user
-            knowledge_base_id: Knowledge base ID
-
-        Returns:
-            KnowledgeBaseResponse
-
-        Raises:
-            ValueError: If knowledge base not found or access denied
-        """
-        knowledge_base, has_access = KnowledgeService.get_knowledge_base(
-            db=db,
-            knowledge_base_id=knowledge_base_id,
-            user_id=user.id,
-        )
-
-        if not knowledge_base:
-            raise ValueError("Knowledge base not found")
-        if not has_access:
-            raise ValueError("Access denied to knowledge base")
-
-        return KnowledgeBaseResponse.from_kind(
-            knowledge_base, KnowledgeService.get_document_count(db, knowledge_base.id)
-        )
-
-    def _get_document_with_access_or_raise(
-        self,
-        db: Session,
-        user: User,
-        document_id: int,
-    ) -> KnowledgeDocument:
-        """Load a document and verify the user can access its knowledge base."""
-        document = KnowledgeService.get_document(
-            db=db,
-            document_id=document_id,
-            user_id=user.id,
-        )
-        if not document:
-            raise ValueError("Document not found")
-
-        knowledge_base, has_access = KnowledgeService.get_knowledge_base(
-            db=db,
-            knowledge_base_id=document.kind_id,
-            user_id=user.id,
-        )
-        if not knowledge_base:
-            raise ValueError("Knowledge base not found")
-        if not has_access:
-            raise ValueError("Access denied to this document")
-
-        return document
-
-    def read_document_content(
-        self,
-        db: Session,
-        user: User,
-        document_id: int,
-        offset: int = 0,
-        limit: int = MAX_DOCUMENT_READ_LIMIT,
-    ) -> DocumentContentReadResponse:
-        """
-        Read raw document content with offset/limit pagination.
-
-        Args:
-            db: Database session
-            user: Current user
-            document_id: Document ID
-            offset: Read start offset
-            limit: Maximum number of characters to return
-
-        Returns:
-            DocumentContentReadResponse
-
-        Raises:
-            ValueError: If paging is invalid, the document is missing, or access fails
-        """
-        _validate_document_read_paging(offset=offset, limit=limit)
-
-        document = self._get_document_with_access_or_raise(
-            db=db,
-            user=user,
-            document_id=document_id,
-        )
-
-        results = document_read_service.read_documents(
-            db=db,
-            document_ids=[document_id],
-            offset=offset,
-            limit=limit,
-            knowledge_base_ids=[document.kind_id],
-        )
-        result = results[0] if results else None
-
-        if not result or result.get("error_code") == DOCUMENT_READ_ERROR_NOT_FOUND:
-            raise ValueError("Document not found")
-        if result.get("error"):
-            raise ValueError(result["error"])
-        _validate_document_read_result_payload(result)
-
-        return DocumentContentReadResponse(
-            document_id=result["id"],
-            name=result["name"],
-            content=result["content"],
-            total_length=result["total_length"],
-            offset=result["offset"],
-            returned_length=result["returned_length"],
-            has_more=result["has_more"],
-            kb_id=result["kb_id"],
         )
 
     def update_knowledge_base(

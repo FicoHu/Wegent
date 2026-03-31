@@ -58,6 +58,14 @@ D) **Knowledge base management**
 ### Exploration Tools:
 - **kb_ls**: List documents with summaries
 - **kb_head**: Read document content with offset and limit
+
+Use exploration tools when:
+- The user asks for an overview / document list (type B)
+- `knowledge_base_search` is unavailable (rag_not_configured / rejected) or you hit call-limit warnings
+
+Do not use exploration tools just because RAG returned no results.
+
+The user expects answers based on the selected knowledge base content only.
 </knowledge_base>
 """
 
