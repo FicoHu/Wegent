@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-ROOT_DIR="/Users/yunpeng7/AIGCWorkSpace/Wegent"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 BACKEND_DIR="${ROOT_DIR}/backend"
 ENV_FILE="${ROOT_DIR}/.env"
 BACKEND_LOG="${ROOT_DIR}/.pids/backend.log"
