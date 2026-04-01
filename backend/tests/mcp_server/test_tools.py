@@ -119,6 +119,14 @@ class TestSilentExitMarkerDetection:
 class TestKnowledgeTool:
     """Tests for knowledge MCP tools."""
 
+    def test_knowledge_mcp_tools_registry_contains_registered_tools(self):
+        """Test that the backward-compatible tool registry is built for the knowledge server."""
+        module = get_knowledge_module()
+
+        assert "list_knowledge_bases" in module.KNOWLEDGE_MCP_TOOLS
+        assert "list_documents" in module.KNOWLEDGE_MCP_TOOLS
+        assert "read_document_content" in module.KNOWLEDGE_MCP_TOOLS
+
     def test_read_document_content_returns_orchestrator_payload(self):
         """Test that read_document_content returns the orchestrator payload."""
         module = get_knowledge_module()
@@ -249,3 +257,13 @@ class TestKnowledgeTool:
         default_limit = inspect.signature(target).parameters["limit"].default
 
         assert default_limit == module.MAX_DOCUMENT_READ_LIMIT
+
+    def test_update_document_content_description_mentions_editable_text_files(self):
+        """Tool description should reflect support for editable text file documents."""
+        module = get_knowledge_module()
+
+        tool_info = module.update_document_content._mcp_tool_info
+
+        assert "TEXT type documents" not in tool_info["description"]
+        assert "txt" in tool_info["description"]
+        assert "md" in tool_info["description"]
