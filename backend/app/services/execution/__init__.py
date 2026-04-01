@@ -70,7 +70,7 @@ class _SandboxManagerClient:
         from app.core.config import settings
 
         base_url = settings.EXECUTOR_MANAGER_URL.rstrip("/")
-        url = f"{base_url}/executor-manager/sandbox"
+        url = f"{base_url}/executor-manager/sandboxes"
 
         payload = {
             "shell_type": shell_type,

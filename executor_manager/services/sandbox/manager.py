@@ -184,15 +184,6 @@ class SandboxManager(metaclass=SingletonMeta):
         # Build task data for executor
         task_data = self._build_sandbox_task(sandbox)
 
-        # Log task data for debugging auth_token transmission
-        logger.info(
-            f"[SandboxManager] Creating sandbox container with task_data: "
-            f"task_id={task_data.get('task_id')}, "
-            f"type={task_data.get('type')}, "
-            f"auth_token={'present' if task_data.get('auth_token') else 'missing'}, "
-            f"metadata_keys={list(sandbox.metadata.keys())}"
-        )
-
         # Get executor and create container
         executor = ExecutorDispatcher.get_executor(EXECUTOR_DISPATCHER_MODE)
 
@@ -358,6 +349,10 @@ class SandboxManager(metaclass=SingletonMeta):
         skip_git_clone = sandbox.metadata.get("skip_git_clone", False)
         if skip_git_clone:
             task["skip_git_clone"] = True
+
+        skill_identity_token = sandbox.metadata.get("skill_identity_token")
+        if skill_identity_token:
+            task["skill_identity_token"] = skill_identity_token
 
         return task
 

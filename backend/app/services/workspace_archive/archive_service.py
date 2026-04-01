@@ -12,11 +12,13 @@ Provides functionality to:
 """
 
 import logging
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.models.subtask import Subtask
@@ -354,14 +356,15 @@ class ArchiveService:
             archive_info: Archive information to store
         """
         try:
-            task_json = task.json
+            task_json = deepcopy(task.json)
             if "status" not in task_json:
                 task_json["status"] = {}
 
             # Convert ArchiveInfo to dict for JSON storage
-            task_json["status"]["archive"] = archive_info.model_dump()
+            task_json["status"]["archive"] = archive_info.model_dump(mode="json")
 
             task.json = task_json
+            flag_modified(task, "json")
             db.add(task)
             # Note: commit is done by caller
 

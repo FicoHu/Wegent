@@ -51,6 +51,55 @@ ARCHIVE_EXCLUDE_PATTERNS = [
     ".cache",
 ]
 
+CLAUDE_HOME_ARCHIVE_PREFIX = "__home__"
+CLAUDE_CONFIG_DIR_NAME = ".claude"
+CLAUDE_CONFIG_FILE_NAME = ".claude.json"
+
+
+def get_workspace_path(task_id: int) -> Path:
+    """Get task workspace path."""
+    return Path(f"/workspace/{task_id}")
+
+
+def get_home_path() -> Path:
+    """Get current user home path."""
+    return Path.home()
+
+
+def extract_tar_members(
+    tar: tarfile.TarFile,
+    path: str,
+    members: Optional[list[tarfile.TarInfo]] = None,
+) -> None:
+    """Extract tar members with safe filter when supported by Python version."""
+    extract_kwargs = {"path": path}
+    if members is not None:
+        extract_kwargs["members"] = members
+
+    try:
+        tar.extractall(filter="data", **extract_kwargs)
+    except TypeError:
+        tar.extractall(**extract_kwargs)
+
+
+async def upload_archive_to_url(upload_url: str, content: bytes) -> None:
+    """Upload archive bytes to object storage using presigned URL."""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.put(
+            upload_url,
+            content=content,
+            headers={"Content-Type": "application/gzip"},
+        )
+        response.raise_for_status()
+
+
+async def download_archive_from_url(download_url: str) -> bytes:
+    """Download archive bytes from object storage using presigned URL."""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.get(download_url)
+        response.raise_for_status()
+        return response.content
+
 
 def register_rest_api(app: FastAPI):
     """Register REST API endpoints from OpenAPI spec"""
@@ -248,7 +297,7 @@ def register_rest_api(app: FastAPI):
         logger.info(f"[archive] Starting archive for task {task_id}")
 
         # Workspace path
-        workspace_path = Path(f"/workspace/{task_id}")
+        workspace_path = get_workspace_path(task_id)
         if not workspace_path.exists():
             logger.warning(f"[archive] Workspace not found: {workspace_path}")
             raise HTTPException(
@@ -295,6 +344,33 @@ def register_rest_api(app: FastAPI):
                         tar.add(str(item), arcname=item.name)
                         logger.debug(f"[archive] Added: {item.name}")
 
+                    home_path = get_home_path()
+                    claude_home_dir = home_path / CLAUDE_CONFIG_DIR_NAME
+                    if claude_home_dir.exists():
+                        tar.add(
+                            str(claude_home_dir),
+                            arcname=(
+                                f"{CLAUDE_HOME_ARCHIVE_PREFIX}/"
+                                f"{CLAUDE_CONFIG_DIR_NAME}"
+                            ),
+                        )
+                        logger.debug(
+                            f"[archive] Added Claude home directory: {claude_home_dir}"
+                        )
+
+                    claude_home_config = home_path / CLAUDE_CONFIG_FILE_NAME
+                    if claude_home_config.exists():
+                        tar.add(
+                            str(claude_home_config),
+                            arcname=(
+                                f"{CLAUDE_HOME_ARCHIVE_PREFIX}/"
+                                f"{CLAUDE_CONFIG_FILE_NAME}"
+                            ),
+                        )
+                        logger.debug(
+                            f"[archive] Added Claude home config: {claude_home_config}"
+                        )
+
                 # Check size
                 archive_size = os.path.getsize(tmp_path)
                 logger.info(
@@ -315,13 +391,7 @@ def register_rest_api(app: FastAPI):
                 # Upload to MinIO using presigned URL
                 logger.info(f"[archive] Uploading archive to MinIO")
                 with open(tmp_path, "rb") as f:
-                    async with httpx.AsyncClient(timeout=120.0) as client:
-                        response = await client.put(
-                            upload_url,
-                            content=f.read(),
-                            headers={"Content-Type": "application/gzip"},
-                        )
-                        response.raise_for_status()
+                    await upload_archive_to_url(upload_url, f.read())
 
                 logger.info(
                     f"[archive] Successfully archived task {task_id}, "
@@ -366,7 +436,7 @@ def register_rest_api(app: FastAPI):
         logger.info(f"[restore] Starting restore for task {task_id}")
 
         # Workspace path
-        workspace_path = Path(f"/workspace/{task_id}")
+        workspace_path = get_workspace_path(task_id)
 
         try:
             # Download archive from MinIO
@@ -378,12 +448,10 @@ def register_rest_api(app: FastAPI):
                 tmp_path = tmp_file.name
 
             try:
-                async with httpx.AsyncClient(timeout=120.0) as client:
-                    response = await client.get(download_url)
-                    response.raise_for_status()
+                archive_content = await download_archive_from_url(download_url)
 
-                    with open(tmp_path, "wb") as f:
-                        f.write(response.content)
+                with open(tmp_path, "wb") as f:
+                    f.write(archive_content)
 
                 archive_size = os.path.getsize(tmp_path)
                 logger.info(f"[restore] Downloaded archive: {archive_size} bytes")
@@ -397,15 +465,65 @@ def register_rest_api(app: FastAPI):
 
                 # Extract archive
                 with tarfile.open(tmp_path, "r:gz") as tar:
-                    # Get member names for tracking
-                    for member in tar.getnames():
-                        if member.startswith(".claude_session_id"):
+                    workspace_members = []
+                    home_members = []
+
+                    # Get member names for tracking and split target location
+                    for member in tar.getmembers():
+                        member_name = member.name
+                        if member_name.startswith(".claude_session_id"):
                             session_restored = True
-                        if member == ".git" or member.startswith(".git/"):
+                        if member_name == ".git" or member_name.startswith(".git/"):
                             git_restored = True
 
-                    # Extract all
-                    tar.extractall(path=str(workspace_path))
+                        if member_name.startswith(f"{CLAUDE_HOME_ARCHIVE_PREFIX}/"):
+                            home_members.append(member)
+                        else:
+                            workspace_members.append(member)
+
+                    # Restore workspace files
+                    extract_tar_members(
+                        tar=tar,
+                        path=str(workspace_path),
+                        members=workspace_members,
+                    )
+
+                    # Restore Claude home files
+                    if home_members:
+                        home_path = get_home_path()
+                        with tempfile.TemporaryDirectory(
+                            prefix="claude-home-restore-"
+                        ) as tmp_home_restore_dir:
+                            extract_tar_members(
+                                tar=tar,
+                                path=tmp_home_restore_dir,
+                                members=home_members,
+                            )
+                            extracted_home_root = (
+                                Path(tmp_home_restore_dir) / CLAUDE_HOME_ARCHIVE_PREFIX
+                            )
+
+                            extracted_claude_dir = (
+                                extracted_home_root / CLAUDE_CONFIG_DIR_NAME
+                            )
+                            target_claude_dir = home_path / CLAUDE_CONFIG_DIR_NAME
+                            if extracted_claude_dir.exists():
+                                if target_claude_dir.exists():
+                                    shutil.rmtree(target_claude_dir)
+                                shutil.copytree(
+                                    extracted_claude_dir,
+                                    target_claude_dir,
+                                )
+
+                            extracted_claude_config = (
+                                extracted_home_root / CLAUDE_CONFIG_FILE_NAME
+                            )
+                            target_claude_config = home_path / CLAUDE_CONFIG_FILE_NAME
+                            if extracted_claude_config.exists():
+                                shutil.copy2(
+                                    extracted_claude_config,
+                                    target_claude_config,
+                                )
 
                 logger.info(
                     f"[restore] Successfully restored task {task_id}, "
