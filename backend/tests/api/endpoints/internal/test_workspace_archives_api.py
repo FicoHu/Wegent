@@ -4,7 +4,7 @@
 
 """Tests for internal workspace archive API endpoints."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
@@ -88,7 +88,7 @@ def test_manual_archive_endpoint_updates_task_archive(
         executor_name="executor-1385",
     )
 
-    expires_at = datetime.now(UTC) + timedelta(days=30)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
     mocker.patch(
         "app.services.workspace_archive.archive_service.archive_storage_service.generate_upload_url",
         return_value=(
