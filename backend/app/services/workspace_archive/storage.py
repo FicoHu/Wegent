@@ -10,8 +10,7 @@ executor and MinIO, avoiding large file transfers through backend.
 """
 
 import logging
-import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from minio import Minio
@@ -20,13 +19,6 @@ from minio.error import S3Error
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-
-
-# Archive configuration constants
-ARCHIVE_MAX_SIZE_MB = int(os.getenv("ARCHIVE_MAX_SIZE_MB", "500"))
-ARCHIVE_RETENTION_DAYS = int(os.getenv("ARCHIVE_RETENTION_DAYS", "30"))
-ARCHIVE_BUCKET = os.getenv("ARCHIVE_BUCKET", "wegent-archives")
-ARCHIVE_ENABLED = os.getenv("ARCHIVE_ENABLED", "true").lower() == "true"
 
 
 class ArchiveStorageService:
@@ -43,7 +35,7 @@ class ArchiveStorageService:
     def __init__(self):
         """Initialize MinIO client from existing S3 configuration."""
         self._client: Optional[Minio] = None
-        self._bucket = ARCHIVE_BUCKET
+        self._bucket = settings.WORKSPACE_ARCHIVE_BUCKET
 
     @property
     def client(self) -> Minio:
@@ -190,7 +182,9 @@ class ArchiveStorageService:
         Returns:
             Expiration datetime (UTC)
         """
-        return datetime.utcnow() + timedelta(days=ARCHIVE_RETENTION_DAYS)
+        return datetime.now(timezone.utc) + timedelta(
+            days=settings.WORKSPACE_ARCHIVE_RETENTION_DAYS
+        )
 
 
 # Global service instance

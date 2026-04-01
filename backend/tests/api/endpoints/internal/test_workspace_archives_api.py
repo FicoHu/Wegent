@@ -122,6 +122,14 @@ def test_manual_archive_endpoint_updates_task_archive(
     assert payload["success"] is True
     assert payload["task_id"] == task.id
     assert payload["archive"]["storageKey"] == "workspace-archives/1385/archive.tar.gz"
+    archived_at = datetime.fromisoformat(
+        payload["archive"]["archivedAt"].replace("Z", "+00:00")
+    )
+    payload_expires_at = datetime.fromisoformat(
+        payload["archive"]["expiresAt"].replace("Z", "+00:00")
+    )
+    assert archived_at.tzinfo == timezone.utc
+    assert payload_expires_at.tzinfo == timezone.utc
     archive_mock.assert_awaited_once()
 
     test_db.expire_all()
