@@ -282,6 +282,8 @@ async def _recover_executor(
             user_name=user.name or user.email or str(user.id),
         )
         return success
+    except RuntimeError:
+        raise
     except Exception as e:
         logger.error(
             f"[schedule_dispatch] Error recovering executor for subtask {subtask.id}: {e}",

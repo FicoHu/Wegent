@@ -8,7 +8,6 @@ Workspace archive service for Pod recovery after deletion.
 This module provides functionality to:
 1. Archive workspace files to MinIO before Pod deletion
 2. Restore workspace files when user sends a message after Pod deletion
-3. Clean up expired archives automatically
 
 Archive flow (Pod deletion):
 1. Celery Beat triggers cleanup_stale_executors every 10 minutes
@@ -28,7 +27,6 @@ Recovery flow (user sends message):
 Key components:
 - ArchiveService: Core archive/restore logic
 - ArchiveStorageService: MinIO presigned URL generation
-- ArchiveCleanupJob: Expired archive cleanup
 """
 
 from app.services.workspace_archive.archive_service import (

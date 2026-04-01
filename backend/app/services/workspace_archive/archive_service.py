@@ -218,31 +218,35 @@ class ArchiveService:
             )
             return False
 
-    def check_archive_available(self, task: TaskResource) -> Tuple[bool, Optional[str]]:
+    def check_archive_available(
+        self, task: TaskResource
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Check if archive is available for restoration.
 
         Args:
             task: Task resource
 
         Returns:
-            Tuple of (available, storage_key or None)
+            Tuple of (available, storage_key or None, reason or None).
+            Reason is "expired" when archive exists but has expired,
+            None when no archive exists or archive is available.
         """
         try:
             task_crd = Task.model_validate(task.json)
             archive_info = task_crd.status.archive if task_crd.status else None
 
             if not archive_info or not archive_info.storageKey:
-                return False, None
+                return False, None, None
 
             # Check expiration
             if archive_info.expiresAt and archive_info.expiresAt < datetime.utcnow():
-                return False, None
+                return False, None, "expired"
 
-            return True, archive_info.storageKey
+            return True, archive_info.storageKey, None
 
         except Exception as e:
             logger.error(f"[ArchiveService] Error checking archive: {e}")
-            return False, None
+            return False, None, None
 
     async def _call_executor_archive(
         self,

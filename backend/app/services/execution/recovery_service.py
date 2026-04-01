@@ -77,9 +77,21 @@ class ExecutorRecoveryService:
 
         try:
             # Check if archive is available
-            archive_available, storage_key = archive_service.check_archive_available(
-                task
+            archive_available, storage_key, reason = (
+                archive_service.check_archive_available(task)
             )
+
+            # Archive exists but expired - reject task execution
+            if reason == "expired":
+                logger.warning(
+                    f"[RecoveryService] Archive expired for task {task_id}, "
+                    "rejecting task execution"
+                )
+                raise RuntimeError(
+                    f"Workspace archive for task {task_id} has expired (>30 days). "
+                    "This task can no longer be resumed. "
+                    "Please create a new task to continue."
+                )
 
             if archive_available:
                 logger.info(
@@ -106,6 +118,8 @@ class ExecutorRecoveryService:
                     user_name=user_name,
                 )
 
+        except RuntimeError:
+            raise
         except Exception as e:
             logger.error(
                 f"[RecoveryService] Error recovering task {task_id}: {e}",
