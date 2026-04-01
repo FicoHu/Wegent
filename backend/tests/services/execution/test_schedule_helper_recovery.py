@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.models.subtask import SubtaskStatus
+from app.services.execution.recovery_service import recovery_service
 from app.services.execution.schedule_helper import _recover_executor
 
 
@@ -24,9 +25,10 @@ async def test_recover_executor_propagates_expired_archive_error():
     user.name = "yunpeng7"
     user.email = "yunpeng7@example.com"
 
-    with patch(
-        "app.services.execution.recovery_service.recovery_service",
-        new=MagicMock(recover=AsyncMock(side_effect=RuntimeError("archive expired"))),
+    with patch.object(
+        recovery_service,
+        "recover",
+        AsyncMock(side_effect=RuntimeError("archive expired")),
     ):
         with pytest.raises(RuntimeError, match="archive expired"):
             await _recover_executor(db=db, subtask=subtask, task=task, user=user)

@@ -4,12 +4,15 @@
 
 """Tests for executor recovery service edge cases."""
 
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.services.execution.recovery_service import ExecutorRecoveryService
+
+recovery_module = importlib.import_module("app.services.execution.recovery_service")
 
 
 @pytest.mark.asyncio
@@ -20,8 +23,9 @@ async def test_recover_raises_when_archive_is_expired():
     subtask = SimpleNamespace(id=11, executor_name="old", executor_namespace="")
     task = SimpleNamespace(id=22)
 
-    with patch(
-        "app.services.execution.recovery_service.archive_service.check_archive_available",
+    with patch.object(
+        recovery_module.archive_service,
+        "check_archive_available",
         return_value=(False, None, "expired"),
     ):
         with pytest.raises(RuntimeError, match="has expired"):
@@ -49,8 +53,9 @@ async def test_recover_without_archive_uses_normal_clone():
     sandbox = SimpleNamespace(container_name="new-executor")
 
     with (
-        patch(
-            "app.services.execution.recovery_service.archive_service.check_archive_available",
+        patch.object(
+            recovery_module.archive_service,
+            "check_archive_available",
             return_value=(False, None, None),
         ),
         patch.object(
@@ -89,8 +94,9 @@ async def test_recover_with_archive_continues_when_restore_fails():
     sandbox = SimpleNamespace(container_name="new-executor")
 
     with (
-        patch(
-            "app.services.execution.recovery_service.archive_service.check_archive_available",
+        patch.object(
+            recovery_module.archive_service,
+            "check_archive_available",
             return_value=(True, "workspace-archives/22/archive.tar.gz", None),
         ),
         patch.object(
@@ -98,8 +104,9 @@ async def test_recover_with_archive_continues_when_restore_fails():
             "_create_sandbox",
             AsyncMock(return_value=(sandbox, None)),
         ) as create_sandbox_mock,
-        patch(
-            "app.services.execution.recovery_service.archive_service.restore_workspace",
+        patch.object(
+            recovery_module.archive_service,
+            "restore_workspace",
             AsyncMock(return_value=False),
         ) as restore_mock,
     ):

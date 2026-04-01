@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.models.subtask import Subtask, SubtaskRole, SubtaskStatus
 from app.models.task import TaskResource
 from app.models.user import User
+from app.services.workspace_archive import archive_service, archive_storage_service
 
 
 def _create_task(test_db: Session, task_id: int, user_id: int) -> TaskResource:
@@ -89,19 +90,22 @@ def test_manual_archive_endpoint_updates_task_archive(
     )
 
     expires_at = datetime.now(timezone.utc) + timedelta(days=30)
-    mocker.patch(
-        "app.services.workspace_archive.archive_service.archive_storage_service.generate_upload_url",
+    mocker.patch.object(
+        archive_storage_service,
+        "generate_upload_url",
         return_value=(
             "https://minio.example.com/upload",
             "workspace-archives/1385/archive.tar.gz",
         ),
     )
-    mocker.patch(
-        "app.services.workspace_archive.archive_service.archive_storage_service.calculate_expiration_time",
+    mocker.patch.object(
+        archive_storage_service,
+        "calculate_expiration_time",
         return_value=expires_at,
     )
-    archive_mock = mocker.patch(
-        "app.services.workspace_archive.archive_service.archive_service._call_executor_archive",
+    archive_mock = mocker.patch.object(
+        archive_service,
+        "_call_executor_archive",
         new=AsyncMock(
             return_value={
                 "size_bytes": 1024,
