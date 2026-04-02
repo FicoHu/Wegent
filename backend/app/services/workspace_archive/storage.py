@@ -10,13 +10,14 @@ executor and MinIO, avoiding large file transfers through backend.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
 
 from minio import Minio
 from minio.error import S3Error
 
 from app.core.config import settings
+from app.utils.workspace_archive_time import workspace_archive_now
 
 logger = logging.getLogger(__name__)
 
@@ -180,9 +181,9 @@ class ArchiveStorageService:
         """Calculate archive expiration time based on retention days.
 
         Returns:
-            Expiration datetime (UTC)
+            Expiration datetime in the configured workspace archive timezone.
         """
-        return datetime.now(timezone.utc) + timedelta(
+        return workspace_archive_now() + timedelta(
             days=settings.WORKSPACE_ARCHIVE_RETENTION_DAYS
         )
 

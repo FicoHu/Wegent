@@ -151,6 +151,7 @@ class Settings(BaseSettings):
     WORKSPACE_ARCHIVE_RETENTION_DAYS: int = 30
     WORKSPACE_ARCHIVE_BUCKET: str = "wegent-archives"
     WORKSPACE_ARCHIVE_ENABLED: bool = True
+    WORKSPACE_ARCHIVE_TIMEZONE: str = "Asia/Shanghai"
 
     # Frontend URL configuration
     FRONTEND_URL: str = "http://localhost:3000"

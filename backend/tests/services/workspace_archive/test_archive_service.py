@@ -45,8 +45,8 @@ def _build_task(expires_at: str) -> SimpleNamespace:
     )
 
 
-def test_check_archive_available_supports_legacy_naive_expiration():
-    """Legacy naive timestamps should still be recognized as expired."""
+def test_check_archive_available_rejects_expired_archive():
+    """Expired archive timestamps should be rejected."""
     expires_at = (datetime.utcnow() - timedelta(days=1)).isoformat()
     task = _build_task(expires_at)
 
@@ -58,8 +58,8 @@ def test_check_archive_available_supports_legacy_naive_expiration():
 
 
 @pytest.mark.asyncio
-async def test_restore_workspace_supports_legacy_naive_expiration():
-    """Restore should safely reject expired legacy timestamps without type errors."""
+async def test_restore_workspace_rejects_expired_archive():
+    """Restore should reject expired archive timestamps."""
     expires_at = (datetime.utcnow() - timedelta(days=1)).isoformat()
     task = _build_task(expires_at)
 
@@ -73,8 +73,8 @@ async def test_restore_workspace_supports_legacy_naive_expiration():
     assert result is False
 
 
-def test_check_archive_available_supports_utc_aware_expiration():
-    """Timezone-aware UTC timestamps should remain available before expiry."""
+def test_check_archive_available_accepts_future_archive():
+    """Future archive timestamps should remain available before expiry."""
     expires_at = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     task = _build_task(expires_at)
 

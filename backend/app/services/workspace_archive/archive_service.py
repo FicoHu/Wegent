@@ -13,7 +13,7 @@ Provides functionality to:
 
 import logging
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
@@ -24,17 +24,14 @@ from app.core.config import settings
 from app.models.subtask import Subtask
 from app.models.task import TaskResource
 from app.schemas.kind import ArchiveInfo, Task
+from app.utils.workspace_archive_time import (
+    normalize_workspace_archive_datetime,
+    workspace_archive_now,
+)
 
 from .storage import archive_storage_service
 
 logger = logging.getLogger(__name__)
-
-
-def _normalize_utc(dt: datetime) -> datetime:
-    """Normalize naive and aware datetimes to timezone-aware UTC."""
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 class ArchiveService:
@@ -110,7 +107,7 @@ class ArchiveService:
             # Create archive info
             archive_info = ArchiveInfo(
                 storageKey=storage_key,
-                archivedAt=datetime.now(timezone.utc),
+                archivedAt=workspace_archive_now(),
                 expiresAt=archive_storage_service.calculate_expiration_time(),
                 sizeBytes=archive_result.get("size_bytes"),
                 sessionFileIncluded=archive_result.get("session_file_included", False),
@@ -173,9 +170,11 @@ class ArchiveService:
                 return False
 
             # Check if archive is expired
-            if archive_info.expiresAt and _normalize_utc(
+            if (
                 archive_info.expiresAt
-            ) < datetime.now(timezone.utc):
+                and normalize_workspace_archive_datetime(archive_info.expiresAt)
+                < workspace_archive_now()
+            ):
                 logger.info(
                     f"[ArchiveService] Archive expired for task {task_id}, "
                     f"expired at {archive_info.expiresAt}"
@@ -243,9 +242,11 @@ class ArchiveService:
                 return False, None, None
 
             # Check expiration
-            if archive_info.expiresAt and _normalize_utc(
+            if (
                 archive_info.expiresAt
-            ) < datetime.now(timezone.utc):
+                and normalize_workspace_archive_datetime(archive_info.expiresAt)
+                < workspace_archive_now()
+            ):
                 return False, None, "expired"
 
             return True, archive_info.storageKey, None

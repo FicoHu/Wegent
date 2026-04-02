@@ -85,6 +85,7 @@ class TestSettings:
         assert s.WORKSPACE_ARCHIVE_BUCKET == "wegent-archives"
         assert s.WORKSPACE_ARCHIVE_MAX_SIZE_MB == 500
         assert s.WORKSPACE_ARCHIVE_ENABLED is True
+        assert s.WORKSPACE_ARCHIVE_TIMEZONE == "Asia/Shanghai"
 
     def test_workspace_archive_settings_from_env(self, monkeypatch):
         """Test workspace archive configuration from environment variables."""
@@ -92,6 +93,7 @@ class TestSettings:
         monkeypatch.setenv("WORKSPACE_ARCHIVE_BUCKET", "custom-archive-bucket")
         monkeypatch.setenv("WORKSPACE_ARCHIVE_MAX_SIZE_MB", "256")
         monkeypatch.setenv("WORKSPACE_ARCHIVE_ENABLED", "false")
+        monkeypatch.setenv("WORKSPACE_ARCHIVE_TIMEZONE", "UTC")
 
         s = Settings()
 
@@ -99,6 +101,7 @@ class TestSettings:
         assert s.WORKSPACE_ARCHIVE_BUCKET == "custom-archive-bucket"
         assert s.WORKSPACE_ARCHIVE_MAX_SIZE_MB == 256
         assert s.WORKSPACE_ARCHIVE_ENABLED is False
+        assert s.WORKSPACE_ARCHIVE_TIMEZONE == "UTC"
 
     def test_settings_oidc_configuration(self):
         """Test OIDC configuration"""
