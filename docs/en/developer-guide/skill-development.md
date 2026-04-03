@@ -275,7 +275,7 @@ CREATE TABLE skill_binaries (
 | `/skills/{skill_id}/download` | GET | Download Skill ZIP package |
 | `/skills/{skill_id}` | PUT | Update Skill |
 | `/skills/{skill_id}` | DELETE | Delete Skill (checks references) |
-| `/api/tasks/{task_id}/skills` | GET | Get task-associated Skills (used by Claude Code) |
+| `/api/tasks/{task_id}/skills` | GET | Get task-associated Skills (used by Claude Code and sandbox initialization, including skill names plus skill refs for precise downloads) |
 
 ---
 

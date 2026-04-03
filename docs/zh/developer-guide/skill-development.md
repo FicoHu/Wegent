@@ -275,7 +275,7 @@ CREATE TABLE skill_binaries (
 | `/skills/{skill_id}/download` | GET | 下载 Skill ZIP 包 |
 | `/skills/{skill_id}` | PUT | 更新 Skill |
 | `/skills/{skill_id}` | DELETE | 删除 Skill（检查引用） |
-| `/api/tasks/{task_id}/skills` | GET | 获取任务关联的 Skills（Claude Code 使用） |
+| `/api/tasks/{task_id}/skills` | GET | 获取任务关联的 Skills（Claude Code 和沙箱初始化使用，返回技能名以及用于精确下载的 skill refs） |
 
 ---
 
