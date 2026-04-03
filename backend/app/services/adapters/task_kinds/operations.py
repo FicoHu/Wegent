@@ -30,7 +30,7 @@ from app.schemas.task import TaskCreate, TaskUpdate
 from app.services.adapters.executor_kinds import executor_kinds_service
 from app.services.adapters.pipeline_stage import pipeline_stage_service
 from app.services.readers.kinds import KindType, kindReader
-from app.services.task_skill_labels import build_task_skill_labels
+from app.services.task_skill_selection import build_task_skill_labels
 
 from .converters import convert_to_task_dict
 from .helpers import create_subtasks
@@ -256,9 +256,6 @@ class TaskOperationsMixin:
         )
         db.add(workspace)
 
-        # Create Task JSON
-        skill_labels = build_task_skill_labels(obj_in.additional_skills)
-
         task_json = {
             "kind": "Task",
             "spec": {
@@ -308,7 +305,7 @@ class TaskOperationsMixin:
                         if obj_in.api_key_name
                         else {}
                     ),
-                    **(skill_labels if skill_labels else {}),
+                    **(build_task_skill_labels(obj_in.additional_skills)),
                 },
             },
             "apiVersion": "agent.wecode.io/v1",

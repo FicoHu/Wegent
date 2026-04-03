@@ -207,8 +207,6 @@ def _initialize_sandbox_claude(auth_token: str, task_id: str) -> None:
 
     # Download and deploy skills
     logger.info(f"[SandboxInit] Deploying {len(all_skills)} skills: {all_skills}")
-    resolved_skill_map = dict(skills_info.skill_refs)
-    resolved_skill_map.update(skills_info.preload_skill_refs)
     downloader = SkillDownloader(
         auth_token=auth_token,
         team_namespace=skills_info.team_namespace,
@@ -216,9 +214,17 @@ def _initialize_sandbox_claude(auth_token: str, task_id: str) -> None:
             int(task_id) if task_id else None
         ),  # Enable task-based authorization for shared teams
     )
+    resolved_skill_map = {
+        **(skills_info.skill_refs or {}),
+        **(skills_info.preload_skill_refs or {}),
+    }
+    logger.info(
+        "[SandboxInit] Resolved skill map prepared: keys=%s",
+        sorted(resolved_skill_map.keys()),
+    )
     result = downloader.download_and_deploy(
         all_skills,
-        resolved_skill_map=resolved_skill_map,
+        resolved_skill_map=resolved_skill_map or None,
     )
     logger.info(
         f"[SandboxInit] Skills deployment complete: "
