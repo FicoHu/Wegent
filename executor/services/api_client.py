@@ -135,6 +135,8 @@ class TaskSkillsInfo:
     team_namespace: str
     skills: List[str]
     preload_skills: List[str]
+    skill_refs: Dict[str, Dict[str, Any]]
+    preload_skill_refs: Dict[str, Dict[str, Any]]
 
 
 def fetch_task_skills(task_id: str, auth_token: str) -> TaskSkillsInfo:
@@ -155,6 +157,8 @@ def fetch_task_skills(task_id: str, auth_token: str) -> TaskSkillsInfo:
         team_namespace="default",
         skills=[],
         preload_skills=[],
+        skill_refs={},
+        preload_skill_refs={},
     )
 
     if not auth_token or not task_id:
@@ -189,6 +193,8 @@ def fetch_task_skills(task_id: str, auth_token: str) -> TaskSkillsInfo:
                 team_namespace=data.get("team_namespace", "default"),
                 skills=data.get("skills", []),
                 preload_skills=data.get("preload_skills", []),
+                skill_refs=data.get("skill_refs", {}),
+                preload_skill_refs=data.get("preload_skill_refs", {}),
             )
         else:
             logger.warning(

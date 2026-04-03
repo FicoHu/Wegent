@@ -119,3 +119,121 @@ def test_resolve_task_skills_uses_batched_kind_loading_for_bots_and_ghosts():
     assert set(result["preload_skills"]) == {"pre-a", "pre-b"}
     assert mock_kind_lookup.call_count == 1
     assert mock_batch_loader.call_count == 2
+
+
+@pytest.mark.unit
+def test_resolve_task_skills_returns_resolved_refs_for_user_selected_and_preloaded_skills():
+    db = Mock(spec=Session)
+
+    mock_task = Mock(spec=TaskResource)
+    mock_task.id = 123
+    mock_task.user_id = 7
+    mock_task.kind = "Task"
+    mock_task.is_active = TaskResource.STATE_ACTIVE
+    mock_task.json = {"kind": "Task"}
+
+    mock_task_query = Mock()
+    mock_task_query.filter.return_value = mock_task_query
+    mock_task_query.first.return_value = mock_task
+    db.query.return_value = mock_task_query
+
+    task_crd = SimpleNamespace(
+        spec=SimpleNamespace(
+            teamRef=SimpleNamespace(name="team-a", namespace="default"),
+        ),
+        metadata=SimpleNamespace(labels={"additionalSkills": '["recday_new"]'}),
+    )
+    team_crd = SimpleNamespace(
+        spec=SimpleNamespace(
+            members=[
+                SimpleNamespace(
+                    botRef=SimpleNamespace(name="bot-a", namespace="default")
+                )
+            ]
+        )
+    )
+
+    bot_a = _build_kind(7, {"kind": "Bot", "name": "bot-a"})
+    ghost_a = _build_kind(7, {"kind": "Ghost", "name": "ghost-a"})
+
+    bot_crd_a = SimpleNamespace(
+        spec=SimpleNamespace(
+            ghostRef=SimpleNamespace(name="ghost-a", namespace="default")
+        )
+    )
+    ghost_crd_a = SimpleNamespace(
+        spec=SimpleNamespace(
+            skills=["alpha"],
+            preload_skills=["alpha"],
+            skill_refs={
+                "alpha": SimpleNamespace(
+                    model_dump=lambda: {
+                        "skill_id": 101,
+                        "namespace": "default",
+                        "is_public": False,
+                    }
+                )
+            },
+            preload_skill_refs={
+                "alpha": SimpleNamespace(
+                    model_dump=lambda: {
+                        "skill_id": 101,
+                        "namespace": "default",
+                        "is_public": False,
+                    }
+                )
+            },
+        )
+    )
+    selected_skill = SimpleNamespace(id=202, namespace="default", user_id=7)
+
+    with (
+        patch(
+            "app.services.task_member_service.task_member_service.is_member",
+            return_value=True,
+        ),
+        patch(
+            "app.services.readers.kinds.kindReader.get_by_name_and_namespace",
+            return_value=_build_kind(7, {"kind": "Team"}),
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Task.model_validate",
+            return_value=task_crd,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Team.model_validate",
+            return_value=team_crd,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Bot.model_validate",
+            return_value=bot_crd_a,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Ghost.model_validate",
+            return_value=ghost_crd_a,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver._batch_load_kinds_by_refs",
+            create=True,
+            side_effect=[
+                {("default", "bot-a"): bot_a},
+                {("default", "ghost-a"): ghost_a},
+            ],
+        ),
+        patch(
+            "app.services.execution.request_builder.TaskRequestBuilder._find_skill_by_ref",
+            return_value=selected_skill,
+        ),
+    ):
+        result = resolve_task_skills(db, task_id=123, user_id=99)
+
+    assert result["skill_refs"]["recday_new"] == {
+        "skill_id": 202,
+        "namespace": "default",
+        "is_public": False,
+    }
+    assert result["preload_skill_refs"]["alpha"] == {
+        "skill_id": 101,
+        "namespace": "default",
+        "is_public": False,
+    }

@@ -254,6 +254,10 @@ class TaskSkillsResponse(BaseModel):
     team_namespace: str = "default"
     skills: List[str] = []  # All bot skills (deduplicated)
     preload_skills: List[str] = []  # Skills to preload
+    skill_refs: dict[str, Any] = {}  # Precise refs for skill downloads
+    preload_skill_refs: dict[str, Any] = (
+        {}
+    )  # Preload refs override same-name skill_refs
 
 
 class PromptDraftGenerateRequest(BaseModel):

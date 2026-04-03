@@ -100,6 +100,7 @@ def _batch_load_kinds_by_refs(
 
 def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str, Any]:
     """Resolve task skills via task -> team -> bots -> ghosts."""
+    from app.services.execution.request_builder import TaskRequestBuilder
     from app.services.readers.kinds import KindType, kindReader
     from app.services.task_member_service import task_member_service
 
@@ -168,6 +169,8 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
     team_crd = Team.model_validate(team.json)
     all_skills = set()
     all_preload_skills = set()
+    skill_refs: Dict[str, Dict[str, Any]] = {}
+    preload_skill_refs: Dict[str, Dict[str, Any]] = {}
 
     bot_refs = {
         (member.botRef.namespace, member.botRef.name)
@@ -203,8 +206,33 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
             ghost_crd = Ghost.model_validate(ghost.json)
             if ghost_crd.spec.skills:
                 all_skills.update(ghost_crd.spec.skills)
+                for skill_name, skill_ref in (
+                    getattr(ghost_crd.spec, "skill_refs", None) or {}
+                ).items():
+                    skill_refs[skill_name] = skill_ref.model_dump()
             if ghost_crd.spec.preload_skills:
                 all_preload_skills.update(ghost_crd.spec.preload_skills)
+                for skill_name, skill_ref in (
+                    getattr(ghost_crd.spec, "preload_skill_refs", None) or {}
+                ).items():
+                    preload_skill_refs[skill_name] = skill_ref.model_dump()
+
+    if user_selected_skills:
+        resolver = TaskRequestBuilder(db)
+        for skill_name in user_selected_skills:
+            resolved_skill = resolver._find_skill_by_ref(
+                skill_name,
+                "default",
+                False,
+                task_owner_id,
+                team_namespace=team_namespace,
+            )
+            if resolved_skill:
+                skill_refs[skill_name] = {
+                    "skill_id": getattr(resolved_skill, "id", None),
+                    "namespace": getattr(resolved_skill, "namespace", "default"),
+                    "is_public": getattr(resolved_skill, "user_id", 1) == 0,
+                }
 
     if user_selected_skills:
         all_skills.update(user_selected_skills)
@@ -224,4 +252,6 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
         "team_namespace": team.namespace or "default",
         "skills": list(all_skills),
         "preload_skills": list(all_preload_skills),
+        "skill_refs": skill_refs,
+        "preload_skill_refs": preload_skill_refs,
     }
