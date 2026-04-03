@@ -237,3 +237,67 @@ def test_resolve_task_skills_returns_resolved_refs_for_user_selected_and_preload
         "namespace": "default",
         "is_public": False,
     }
+
+
+@pytest.mark.unit
+def test_resolve_task_skills_prefers_exact_refs_from_task_labels_for_group_skills():
+    db = Mock(spec=Session)
+
+    mock_task = Mock(spec=TaskResource)
+    mock_task.id = 123
+    mock_task.user_id = 7
+    mock_task.kind = "Task"
+    mock_task.is_active = TaskResource.STATE_ACTIVE
+    mock_task.json = {"kind": "Task"}
+
+    mock_task_query = Mock()
+    mock_task_query.filter.return_value = mock_task_query
+    mock_task_query.first.return_value = mock_task
+    db.query.return_value = mock_task_query
+
+    task_crd = SimpleNamespace(
+        spec=SimpleNamespace(
+            teamRef=SimpleNamespace(name="team-a", namespace="default"),
+        ),
+        metadata=SimpleNamespace(
+            labels={
+                "additionalSkills": '["exchange-calendar"]',
+                "additionalSkillRefs": '{"exchange-calendar":{"namespace":"invest-team","is_public":false}}',
+            }
+        ),
+    )
+    team_crd = SimpleNamespace(spec=SimpleNamespace(members=[]))
+
+    with (
+        patch(
+            "app.services.task_member_service.task_member_service.is_member",
+            return_value=True,
+        ),
+        patch(
+            "app.services.readers.kinds.kindReader.get_by_name_and_namespace",
+            return_value=_build_kind(7, {"kind": "Team"}),
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Task.model_validate",
+            return_value=task_crd,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Team.model_validate",
+            return_value=team_crd,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver._batch_load_kinds_by_refs",
+            create=True,
+            side_effect=[{}, {}],
+        ),
+        patch(
+            "app.services.execution.request_builder.TaskRequestBuilder._find_skill_by_ref"
+        ) as mock_find_skill_by_ref,
+    ):
+        result = resolve_task_skills(db, task_id=123, user_id=99)
+
+    assert result["skill_refs"]["exchange-calendar"] == {
+        "namespace": "invest-team",
+        "is_public": False,
+    }
+    mock_find_skill_by_ref.assert_not_called()

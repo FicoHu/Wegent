@@ -97,3 +97,34 @@ def test_download_single_skill_falls_back_to_name_query_without_skill_id():
     second_call_path = downloader.client.get.call_args_list[1].args[0]
     assert first_call_path.startswith("/api/v1/kinds/skills?name=fallback-skill")
     assert second_call_path.startswith("/api/v1/kinds/skills/456/download")
+
+
+def test_download_single_skill_uses_skill_ref_namespace_for_name_lookup():
+    query_response = Mock()
+    query_response.json.return_value = {
+        "items": [
+            {
+                "metadata": {
+                    "labels": {"id": 789},
+                    "namespace": "invest-team",
+                }
+            }
+        ]
+    }
+    download_response = Mock(content=b"zip-bytes")
+
+    downloader = SkillDownloader(auth_token="token", team_namespace="default")
+    downloader.client.get = Mock(side_effect=[query_response, download_response])
+    downloader._extract_skill_zip = Mock(return_value=True)
+
+    result = downloader._download_single_skill(
+        "exchange-calendar",
+        {"namespace": "invest-team", "is_public": False},
+    )
+
+    assert result is True
+    first_call_path = downloader.client.get.call_args_list[0].args[0]
+    second_call_path = downloader.client.get.call_args_list[1].args[0]
+    assert "name=exchange-calendar" in first_call_path
+    assert "namespace=invest-team" in first_call_path
+    assert second_call_path.startswith("/api/v1/kinds/skills/789/download")

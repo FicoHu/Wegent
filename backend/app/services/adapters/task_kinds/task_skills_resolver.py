@@ -4,7 +4,6 @@
 
 """Skill resolution chain for task skill queries."""
 
-import json as json_lib
 import logging
 from typing import Any, Dict, Set, Tuple
 
@@ -14,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.models.kind import Kind
 from app.models.task import TaskResource
 from app.schemas.kind import Bot, Ghost, Task, Team
+from app.services.task_skill_labels import parse_task_skill_labels
 
 logger = logging.getLogger(__name__)
 
@@ -124,29 +124,15 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
     team_namespace = task_crd.spec.teamRef.namespace
     task_owner_id = task.user_id
 
-    user_selected_skills = []
-    if task_crd.metadata.labels:
-        additional_skills_json = task_crd.metadata.labels.get("additionalSkills")
-        if additional_skills_json:
-            try:
-                parsed_skills = json_lib.loads(additional_skills_json)
-                if isinstance(parsed_skills, list):
-                    user_selected_skills = [
-                        skill
-                        for skill in parsed_skills
-                        if isinstance(skill, str) and skill
-                    ]
-                    logger.info(
-                        "[get_task_skills] Found %s user-selected skills from task labels: %s",
-                        len(user_selected_skills),
-                        user_selected_skills,
-                    )
-            except json_lib.JSONDecodeError as exc:
-                logger.warning(
-                    "[get_task_skills] Failed to parse additionalSkills JSON for task %s: %s",
-                    task_id,
-                    exc,
-                )
+    user_selected_skills, persisted_skill_refs = parse_task_skill_labels(
+        task_crd.metadata.labels
+    )
+    if user_selected_skills:
+        logger.info(
+            "[get_task_skills] Found %s user-selected skills from task labels: %s",
+            len(user_selected_skills),
+            user_selected_skills,
+        )
 
     team = kindReader.get_by_name_and_namespace(
         db, task_owner_id, KindType.TEAM, team_namespace, team_name
@@ -220,6 +206,9 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
     if user_selected_skills:
         resolver = TaskRequestBuilder(db)
         for skill_name in user_selected_skills:
+            if skill_name in persisted_skill_refs:
+                skill_refs[skill_name] = persisted_skill_refs[skill_name]
+                continue
             resolved_skill = resolver._find_skill_by_ref(
                 skill_name,
                 "default",
