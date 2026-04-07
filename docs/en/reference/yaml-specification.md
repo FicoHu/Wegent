@@ -447,6 +447,17 @@ spec:
 | `spec.teamRef` | object | Yes | Team reference |
 | `spec.workspaceRef` | object | Yes | Workspace reference |
 
+### Runtime Labels
+
+During execution, Task may also persist runtime-oriented metadata in `metadata.labels`. For chat skill selection, the current labels are:
+
+| Label | Type | Description |
+|------|------|-------------|
+| `metadata.labels.additionalSkills` | string (JSON array) | Legacy compatibility field that stores only the selected skill names |
+| `metadata.labels.requestedSkillRefs` | string (JSON array) | Precise selection payload whose items include `name`, `namespace`, `is_public`, and optional `skill_id` |
+
+`requestedSkillRefs` is used to preserve explicit selections when same-name skills exist under different namespaces or owners. This lets sandbox restart and delayed local-device startup recover the exact skill identity from `task_id` alone.
+
 ### Task Status
 
 | Status | Description |

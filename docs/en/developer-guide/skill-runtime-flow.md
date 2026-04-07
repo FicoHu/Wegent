@@ -80,9 +80,11 @@ For compatibility, task-level persistence still uses the historical field:
 Specifically:
 
 - `additionalSkills` is the legacy name-only list
-- `requestedSkillRefs` is the new raw selection payload with `name/namespace/is_public`
+- `requestedSkillRefs` is the new raw selection payload with `name/namespace/is_public`, plus optional `skill_id`
 
-Neither field stores derived `skill_id` values. That is intentional: `skill_id` is runtime-resolved state and can become stale if persisted.
+`skill_id` is optional, not mandatory. When chat selection would otherwise be ambiguous, such as same-name skills across multiple namespaces or owners, backend persists the explicitly selected `skill_id` as part of the task-scoped selection payload.
+
+Older tasks may not have `skill_id`, and stale ids are still tolerated. Backend can always fall back to resolving from `name/namespace/is_public` when needed.
 
 ### Subscription
 
@@ -110,6 +112,8 @@ Flow:
 4. execution surfaces use those refs to download skills precisely
 
 This path also drives skill prompt emphasis because `user_selected_skills` is produced here.
+
+The chat skill selector and unified skill listing also keep multiple same-name entries when namespace or owner differs. Frontend therefore must treat the full skill ref, rather than `name` alone, as the selection identity.
 
 ### 2. Subscription Execution
 
@@ -176,7 +180,7 @@ The current implementation keeps these compatibility guarantees:
 
 1. `/tasks/{id}/skills` still returns `skills` / `preload_skills`
 2. historical tasks that only store `additionalSkills` names are resolved on read
-3. new tasks also store `requestedSkillRefs`, so normal chat tasks preserve namespace/public selection for sandbox and local-device startup
+3. new tasks also store `requestedSkillRefs`, and include `skill_id` when available, so normal chat tasks preserve both namespace/public selection and the precise skill instance for sandbox and local-device startup
 4. historical Ghosts without stored `skill_refs` are backfilled by backend lookup rules
 
 Old tasks, old Ghosts, and older consumers therefore continue to work; newer consumers should simply prefer refs when available.

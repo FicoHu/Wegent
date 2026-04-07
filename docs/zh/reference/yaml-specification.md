@@ -447,6 +447,17 @@ spec:
 | `spec.teamRef` | object | 是 | Team 引用 |
 | `spec.workspaceRef` | object | 是 | Workspace 引用 |
 
+### 运行时标签
+
+Task 在运行期间还会通过 `metadata.labels` 持久化与执行期有关的附加信息。对于聊天中的技能选择，当前会使用下面两个标签：
+
+| 标签 | 类型 | 说明 |
+|------|------|------|
+| `metadata.labels.additionalSkills` | string(JSON array) | 历史兼容字段，只保存用户选择的技能名称列表 |
+| `metadata.labels.requestedSkillRefs` | string(JSON array) | 精确技能选择，数组项包含 `name`、`namespace`、`is_public`，并可选包含 `skill_id` |
+
+`requestedSkillRefs` 主要用于保留“同名但不同 namespace / owner”的显式选择结果。执行端在 sandbox 重启、本地设备延迟启动等场景下，可以仅凭 `task_id` 重新拿回精确的技能引用。
+
 ### 任务状态
 
 | 状态 | 说明 |
