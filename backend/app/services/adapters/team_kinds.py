@@ -28,8 +28,8 @@ from app.models.share_link import ResourceType
 from app.models.user import User
 from app.schemas.kind import Bot, Ghost, Model, Shell, Task, Team
 from app.schemas.team import BotInfo, TeamCreate, TeamDetail, TeamInDB, TeamUpdate
-from app.services.adapters.task_kinds.running_tasks import get_running_tasks_for_team
 from app.services.adapters.shell_utils import get_shell_type
+from app.services.adapters.task_kinds.running_tasks import get_running_tasks_for_team
 from app.services.base import BaseService
 from app.services.readers.kinds import KindType, kindReader
 from app.services.readers.users import userReader
@@ -940,7 +940,9 @@ class TeamKindsService(BaseService[Kind, TeamCreate, TeamUpdate]):
 
         return self._convert_to_team_dict(team, db, user_id)
 
-    def _get_running_tasks_for_team(self, db: Session, team: Kind) -> List[Dict[str, Any]]:
+    def _get_running_tasks_for_team(
+        self, db: Session, team: Kind
+    ) -> List[Dict[str, Any]]:
         """
         Get all running tasks for a team.
 

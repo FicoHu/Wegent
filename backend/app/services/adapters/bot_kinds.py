@@ -19,13 +19,13 @@ from app.models.kind import Kind
 from app.models.user import User
 from app.schemas.bot import BotCreate, BotDetail, BotInDB, BotUpdate
 from app.schemas.kind import Bot, Ghost, Model, Shell, SkillRefMeta, Team
-from app.services.adapters.task_kinds.running_tasks import get_running_tasks_for_team
 from app.services.adapters.shell_utils import (
     get_shell_by_name,
     get_shell_info_by_name,
     get_shell_type,
     get_shells_by_names_batch,
 )
+from app.services.adapters.task_kinds.running_tasks import get_running_tasks_for_team
 from app.services.base import BaseService
 from shared.utils.crypto import encrypt_sensitive_data, is_data_encrypted
 
