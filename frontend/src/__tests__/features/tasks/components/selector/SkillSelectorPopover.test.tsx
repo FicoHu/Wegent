@@ -111,4 +111,52 @@ describe('SkillSelectorPopover', () => {
 
     consoleErrorSpy.mockRestore()
   })
+
+  it('renders team skills as locked selections and ignores clicks on them', async () => {
+    const onToggleSkill = jest.fn()
+
+    render(
+      <SkillSelectorPopover
+        skills={[
+          {
+            id: 101,
+            name: 'himalaya-mail',
+            displayName: 'himalaya-mail',
+            namespace: 'default',
+            description: 'team skill',
+            is_active: true,
+            is_public: false,
+            user_id: 1,
+          },
+        ]}
+        teamSkillNames={['himalaya-mail']}
+        preloadedSkillNames={[]}
+        teamSkills={[
+          {
+            skill_id: 101,
+            name: 'himalaya-mail',
+            namespace: 'default',
+            is_public: false,
+          },
+        ]}
+        selectedSkills={[
+          {
+            skill_id: 101,
+            name: 'himalaya-mail',
+            namespace: 'default',
+            is_public: false,
+          },
+        ]}
+        onToggleSkill={onToggleSkill}
+        isChatShell={false}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'common:skillSelector.skill_button_label' }))
+
+    const teamSkillItem = await screen.findByText('himalaya-mail')
+    fireEvent.click(teamSkillItem)
+
+    expect(onToggleSkill).not.toHaveBeenCalled()
+  })
 })

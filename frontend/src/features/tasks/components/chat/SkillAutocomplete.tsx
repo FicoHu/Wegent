@@ -359,6 +359,8 @@ export default function SkillAutocomplete({
 
     const skillRef = toSkillRef(skill)
     const isSelected = selectedSkills.some(selected => isSameSkillRef(selected, skillRef))
+    const isLocked = teamSkills.some(teamSkill => teamSkill.name === skillRef.name)
+    const isInteractive = !readOnly && !isLocked
     const displayIndex = itemIndex
     itemIndex++
 
@@ -367,15 +369,19 @@ export default function SkillAutocomplete({
         key={`skill-${renderItems.length}`}
         data-skill-index={displayIndex}
         className={`px-3 py-2 transition-colors flex items-center gap-2 ${
-          readOnly ? 'cursor-default' : 'cursor-pointer'
+          isInteractive ? 'cursor-pointer' : 'cursor-default'
         } ${
-          displayIndex === selectedIndex ? 'bg-muted' : readOnly ? '' : 'hover:bg-muted'
-        } ${isSelected ? 'opacity-60' : ''}`}
-        onClick={readOnly ? undefined : e => handleSelect(skillRef, e)}
-        role={readOnly ? undefined : 'button'}
-        tabIndex={readOnly ? -1 : 0}
+          displayIndex === selectedIndex && isInteractive
+            ? 'bg-muted'
+            : isInteractive
+              ? 'hover:bg-muted'
+              : 'opacity-60'
+        }`}
+        onClick={isInteractive ? e => handleSelect(skillRef, e) : undefined}
+        role={isInteractive ? 'button' : undefined}
+        tabIndex={isInteractive ? 0 : -1}
         onKeyDown={
-          readOnly
+          !isInteractive
             ? undefined
             : e => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -385,11 +391,13 @@ export default function SkillAutocomplete({
               }
         }
       >
-        <Zap className={`h-4 w-4 flex-shrink-0 ${readOnly ? 'text-text-muted' : 'text-primary'}`} />
+        <Zap
+          className={`h-4 w-4 flex-shrink-0 ${!isInteractive ? 'text-text-muted' : 'text-primary'}`}
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span
-              className={`text-sm font-medium truncate ${readOnly ? 'text-text-muted' : 'text-text-primary'}`}
+              className={`text-sm font-medium truncate ${!isInteractive ? 'text-text-muted' : 'text-text-primary'}`}
             >
               {skill.displayName || skill.name}
             </span>

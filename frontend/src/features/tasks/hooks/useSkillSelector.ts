@@ -9,7 +9,12 @@ import { fetchUnifiedSkillsList, UnifiedSkill } from '@/apis/skills'
 import { fetchTeamSkills, TeamSkillsResponse } from '@/apis/team'
 import type { TaskDetail, Team } from '@/types/api'
 import { isChatShell } from '../service/messageService'
-import { isSameSkillRef, SkillRef, toSkillRef } from '../service/skillSelectionService'
+import {
+  isSameSkillRef,
+  mergeSkillRefs,
+  SkillRef,
+  toSkillRef,
+} from '../service/skillSelectionService'
 
 interface UseSkillSelectorOptions {
   /** Selected team for the current chat */
@@ -70,8 +75,8 @@ export function useSkillSelector({
   const [availableSkills, setAvailableSkills] = useState<UnifiedSkill[]>([])
   // State for team-specific skills (from backend)
   const [teamSkillsData, setTeamSkillsData] = useState<TeamSkillsResponse | null>(null)
-  // User-selected skills
-  const [selectedSkills, setSelectedSkills] = useState<SkillRef[]>([])
+  // User-selected skills (team-required skills are merged in separately)
+  const [selectedUserSkills, setSelectedUserSkills] = useState<SkillRef[]>([])
   // Loading and error states
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -196,7 +201,7 @@ export function useSkillSelector({
     if (taskDetail?.id) {
       return
     }
-    setSelectedSkills([])
+    setSelectedUserSkills([])
   }, [team?.id, taskDetail?.id])
 
   // Restore selected skills when viewing an existing task from history.
@@ -205,37 +210,63 @@ export function useSkillSelector({
       return
     }
 
-    setSelectedSkills(restoredTaskSkills)
+    setSelectedUserSkills(restoredTaskSkills)
   }, [restoredTaskSkills, taskDetail?.id])
 
+  const selectedSkills = useMemo<SkillRef[]>(
+    () => mergeSkillRefs(teamSkills, selectedUserSkills),
+    [selectedUserSkills, teamSkills]
+  )
+
   // Skill management callbacks
-  const addSkill = useCallback((skill: SkillRef) => {
-    setSelectedSkills(prev => {
-      if (prev.some(selected => isSameSkillRef(selected, skill))) {
-        return prev
+  const addSkill = useCallback(
+    (skill: SkillRef) => {
+      setSelectedUserSkills(prev => {
+        if (teamSkills.some(teamSkill => teamSkill.name === skill.name)) {
+          return prev
+        }
+
+        if (prev.some(selected => isSameSkillRef(selected, skill))) {
+          return prev
+        }
+
+        // Only allow one selected variant per skill name.
+        return [...prev.filter(selected => selected.name !== skill.name), skill]
+      })
+    },
+    [teamSkills]
+  )
+
+  const removeSkill = useCallback(
+    (skill: SkillRef) => {
+      if (teamSkills.some(teamSkill => isSameSkillRef(teamSkill, skill))) {
+        return
       }
 
-      // Only allow one selected variant per skill name.
-      return [...prev.filter(selected => selected.name !== skill.name), skill]
-    })
-  }, [])
+      setSelectedUserSkills(prev => prev.filter(selected => !isSameSkillRef(selected, skill)))
+    },
+    [teamSkills]
+  )
 
-  const removeSkill = useCallback((skill: SkillRef) => {
-    setSelectedSkills(prev => prev.filter(selected => !isSameSkillRef(selected, skill)))
-  }, [])
-
-  const toggleSkill = useCallback((skill: SkillRef) => {
-    setSelectedSkills(prev => {
-      if (prev.some(selected => isSameSkillRef(selected, skill))) {
-        return prev.filter(selected => !isSameSkillRef(selected, skill))
+  const toggleSkill = useCallback(
+    (skill: SkillRef) => {
+      if (teamSkills.some(teamSkill => teamSkill.name === skill.name)) {
+        return
       }
 
-      return [...prev.filter(selected => selected.name !== skill.name), skill]
-    })
-  }, [])
+      setSelectedUserSkills(prev => {
+        if (prev.some(selected => isSameSkillRef(selected, skill))) {
+          return prev.filter(selected => !isSameSkillRef(selected, skill))
+        }
+
+        return [...prev.filter(selected => selected.name !== skill.name), skill]
+      })
+    },
+    [teamSkills]
+  )
 
   const resetSkills = useCallback(() => {
-    setSelectedSkills([])
+    setSelectedUserSkills([])
   }, [])
 
   const normalizedSelectedSkills = useMemo<SkillRef[]>(() => {
