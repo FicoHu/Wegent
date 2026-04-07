@@ -27,7 +27,7 @@ import { useTeamContext } from '@/contexts/TeamContext'
 import { Monitor, WifiOff } from 'lucide-react'
 import { ChatArea } from '@/features/tasks/components/chat'
 import { isOpenClawDevice } from '@/features/devices/utils/device-status'
-import { TaskParamSync } from '@/features/tasks/components/params'
+import TaskParamSync from '@/features/tasks/components/params/TaskParamSync'
 import { usePageExecutionTarget } from '@/features/tasks/hooks/usePageExecutionTarget'
 
 export default function DeviceChatPage() {

@@ -6,7 +6,7 @@
 
 import { Suspense } from 'react'
 import dynamic from 'next/dynamic'
-import { TaskParamSync } from '@/features/tasks/components/params'
+import TaskParamSync from '@/features/tasks/components/params/TaskParamSync'
 import '@/app/tasks/tasks.css'
 import '@/features/common/scrollbar.css'
 import { useIsMobile } from '@/features/layout/hooks/useMediaQuery'
