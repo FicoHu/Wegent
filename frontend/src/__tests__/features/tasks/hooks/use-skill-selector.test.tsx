@@ -6,7 +6,7 @@ import '@testing-library/jest-dom'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import { useSkillSelector } from '@/features/tasks/hooks/useSkillSelector'
-import type { Team } from '@/types/api'
+import type { TaskDetail, Team } from '@/types/api'
 
 const mockFetchUnifiedSkillsList = jest.fn()
 const mockFetchTeamSkills = jest.fn()
@@ -74,6 +74,44 @@ function HookHarness() {
   )
 }
 
+function createTaskDetail(overrides: Partial<TaskDetail> = {}): TaskDetail {
+  return {
+    id: 42,
+    title: 'task',
+    git_url: '',
+    git_repo: '',
+    git_repo_id: 0,
+    git_domain: '',
+    branch_name: '',
+    prompt: 'prompt',
+    status: 'COMPLETED',
+    task_type: 'chat',
+    progress: 100,
+    batch: 0,
+    result: {},
+    error_message: '',
+    created_at: '2026-04-07T00:00:00Z',
+    updated_at: '2026-04-07T00:00:00Z',
+    user: {
+      id: 1,
+      user_name: 'tester',
+      email: 'tester@example.com',
+      is_active: true,
+      created_at: '2026-04-07T00:00:00Z',
+      updated_at: '2026-04-07T00:00:00Z',
+      git_info: [],
+    },
+    team: createTeam(),
+    ...overrides,
+  }
+}
+
+function HistoryTaskHarness({ taskDetail }: { taskDetail: TaskDetail }) {
+  const state = useSkillSelector({ team: createTeam(), taskDetail })
+
+  return <div data-testid="selected-skills">{JSON.stringify(state.selectedSkills)}</div>
+}
+
 describe('useSkillSelector', () => {
   beforeEach(() => {
     mockFetchUnifiedSkillsList.mockResolvedValue([
@@ -121,6 +159,32 @@ describe('useSkillSelector', () => {
     await waitFor(() => {
       expect(screen.getByTestId('selected-skills')).toHaveTextContent('"skill_id":202')
       expect(screen.getByTestId('selected-skills')).not.toHaveTextContent('"skill_id":101')
+    })
+  })
+
+  it('restores selected skills from task detail refs for history tasks', async () => {
+    render(
+      <HistoryTaskHarness
+        taskDetail={createTaskDetail({
+          requested_skill_refs: [
+            {
+              skill_id: 202,
+              name: 'recday_new',
+              namespace: 'skill-beta',
+              is_public: false,
+            },
+          ],
+        })}
+      />
+    )
+
+    await waitFor(() => {
+      expect(mockFetchUnifiedSkillsList).toHaveBeenCalled()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('selected-skills')).toHaveTextContent('"skill_id":202')
+      expect(screen.getByTestId('selected-skills')).toHaveTextContent('"namespace":"skill-beta"')
     })
   })
 })

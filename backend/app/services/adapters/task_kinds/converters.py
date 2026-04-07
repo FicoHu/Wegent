@@ -19,6 +19,10 @@ from app.models.task import TaskResource
 from app.schemas.kind import Task, Team, Workspace
 from app.services.readers.kinds import KindType, kindReader
 from app.services.readers.users import userReader
+from app.services.task_skill_selection import (
+    parse_additional_skill_names_from_labels,
+    parse_requested_skill_refs_from_labels,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +150,9 @@ def convert_to_task_dict(task: Kind, db: Session, user_id: int) -> Dict[str, Any
 
     # Extract device_id from task spec
     device_id = task_crd.spec.device_id if hasattr(task_crd.spec, "device_id") else None
+    task_labels = task_crd.metadata.labels or {}
+    requested_skill_refs = parse_requested_skill_refs_from_labels(task_labels)
+    additional_skill_names = parse_additional_skill_names_from_labels(task_labels)
 
     return {
         "id": task.id,
@@ -173,6 +180,8 @@ def convert_to_task_dict(task: Kind, db: Session, user_id: int) -> Dict[str, Any
         "app": app_data,
         "device_id": device_id,
         "preserve_executor": preserve_executor,
+        "requested_skill_refs": requested_skill_refs,
+        "additional_skill_names": additional_skill_names,
     }
 
 

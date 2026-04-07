@@ -72,6 +72,13 @@ export interface SkillRefMeta {
   is_public: boolean
 }
 
+export interface TaskSkillRef {
+  skill_id?: number
+  name: string
+  namespace: string
+  is_public: boolean
+}
+
 export interface KnowledgeBaseDefaultRef {
   id: number
   name: string
@@ -303,6 +310,8 @@ export interface TaskDetail {
   app?: TaskApp | null // App preview information (set by expose_service tool)
   device_id?: string | null // Device ID used for execution (for task history)
   preserve_executor?: boolean // Whether to preserve executor pod after task completion
+  requested_skill_refs?: TaskSkillRef[]
+  additional_skill_names?: string[]
 }
 
 /** Correction data stored in subtask.result.correction */

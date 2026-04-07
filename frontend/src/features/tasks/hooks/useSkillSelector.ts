@@ -7,13 +7,15 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { fetchUnifiedSkillsList, UnifiedSkill } from '@/apis/skills'
 import { fetchTeamSkills, TeamSkillsResponse } from '@/apis/team'
-import type { Team } from '@/types/api'
+import type { TaskDetail, Team } from '@/types/api'
 import { isChatShell } from '../service/messageService'
 import { isSameSkillRef, SkillRef, toSkillRef } from '../service/skillSelectionService'
 
 interface UseSkillSelectorOptions {
   /** Selected team for the current chat */
   team: Team | null
+  /** Selected task detail for history-task skill restoration */
+  taskDetail?: TaskDetail | null
   /** Whether skills feature is enabled */
   enabled?: boolean
 }
@@ -61,6 +63,7 @@ interface UseSkillSelectorReturn {
  */
 export function useSkillSelector({
   team,
+  taskDetail = null,
   enabled = true,
 }: UseSkillSelectorOptions): UseSkillSelectorReturn {
   // State for available skills from unified API
@@ -120,6 +123,30 @@ export function useSkillSelector({
       .map(skill => toSkillRef(skill))
   }, [availableSkills, teamSkillsData])
 
+  const restoredTaskSkills = useMemo<SkillRef[]>(() => {
+    if (!taskDetail) {
+      return []
+    }
+
+    if (taskDetail.requested_skill_refs?.length) {
+      return taskDetail.requested_skill_refs.map(skill => ({
+        skill_id: skill.skill_id,
+        name: skill.name,
+        namespace: skill.namespace,
+        is_public: skill.is_public,
+      }))
+    }
+
+    if (!taskDetail.additional_skill_names?.length) {
+      return []
+    }
+
+    return taskDetail.additional_skill_names
+      .map(name => availableSkills.find(skill => skill.name === name))
+      .filter((skill): skill is UnifiedSkill => !!skill)
+      .map(skill => toSkillRef(skill))
+  }, [availableSkills, taskDetail])
+
   // Fetch available skills when enabled
   useEffect(() => {
     if (!enabled) {
@@ -166,8 +193,20 @@ export function useSkillSelector({
 
   // Reset selected skills when team changes
   useEffect(() => {
+    if (taskDetail?.id) {
+      return
+    }
     setSelectedSkills([])
-  }, [team?.id])
+  }, [team?.id, taskDetail?.id])
+
+  // Restore selected skills when viewing an existing task from history.
+  useEffect(() => {
+    if (!taskDetail?.id) {
+      return
+    }
+
+    setSelectedSkills(restoredTaskSkills)
+  }, [restoredTaskSkills, taskDetail?.id])
 
   // Skill management callbacks
   const addSkill = useCallback((skill: SkillRef) => {

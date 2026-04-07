@@ -173,6 +173,7 @@ function ChatAreaContent({
   // Skill selector state - fetches available skills and manages selection
   const skillSelector = useSkillSelector({
     team: chatState.selectedTeam,
+    taskDetail: selectedTaskDetail,
     enabled: true,
   })
 

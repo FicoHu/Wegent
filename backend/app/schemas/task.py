@@ -175,6 +175,8 @@ class TaskDetail(BaseModel):
     preserve_executor: bool = (
         False  # Whether to preserve executor pod after task completion
     )
+    requested_skill_refs: List[SkillRef] = []
+    additional_skill_names: List[str] = []
 
     class Config:
         from_attributes = True
