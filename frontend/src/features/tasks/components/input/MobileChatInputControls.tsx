@@ -33,6 +33,7 @@ import type {
 } from '@/types/api'
 import type { ContextItem } from '@/types/context'
 import type { UnifiedSkill } from '@/apis/skills'
+import type { SkillRef } from '../../service/skillSelectionService'
 import {
   canUseChatContexts,
   isChatShell,
@@ -105,8 +106,10 @@ export interface MobileChatInputControlsProps {
   availableSkills?: UnifiedSkill[]
   teamSkillNames?: string[]
   preloadedSkillNames?: string[]
-  selectedSkillNames?: string[]
-  onToggleSkill?: (skillName: string) => void
+  teamSkills?: SkillRef[]
+  preloadedSkills?: SkillRef[]
+  selectedSkills?: SkillRef[]
+  onToggleSkill?: (skill: SkillRef) => void
 
   /** When true, hide all selectors - only show send button */
   hideSelectors?: boolean
@@ -158,7 +161,9 @@ export function MobileChatInputControls({
   availableSkills = [],
   teamSkillNames = [],
   preloadedSkillNames = [],
-  selectedSkillNames = [],
+  teamSkills = [],
+  preloadedSkills = [],
+  selectedSkills = [],
   onToggleSkill,
   hideSelectors,
 }: MobileChatInputControlsProps) {
@@ -261,7 +266,9 @@ export function MobileChatInputControls({
             skills={availableSkills}
             teamSkillNames={teamSkillNames}
             preloadedSkillNames={preloadedSkillNames}
-            selectedSkillNames={selectedSkillNames}
+            teamSkills={teamSkills}
+            preloadedSkills={preloadedSkills}
+            selectedSkills={selectedSkills}
             onToggleSkill={onToggleSkill}
             isChatShell={isChatShell(selectedTeam)}
             disabled={isLoading || isStreaming}

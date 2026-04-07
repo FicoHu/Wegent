@@ -10,14 +10,15 @@ import { X, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { UnifiedSkill } from '@/apis/skills'
+import { getSkillRefKey, SkillRef } from '../../service/skillSelectionService'
 
 interface SelectedSkillBadgesProps {
   /** All available skills (for looking up display names) */
   skills: UnifiedSkill[]
-  /** Selected skill names */
-  selectedSkillNames: string[]
+  /** Selected skills */
+  selectedSkills: SkillRef[]
   /** Callback when a skill should be removed */
-  onRemove: (skillName: string) => void
+  onRemove: (skill: SkillRef) => void
   /** Whether this is a Chat Shell (determines hint text) */
   isChatShell?: boolean
   /** Max skills to show before collapsing (default: 3) */
@@ -32,35 +33,36 @@ interface SelectedSkillBadgesProps {
  */
 export default function SelectedSkillBadges({
   skills,
-  selectedSkillNames,
+  selectedSkills,
   onRemove,
   isChatShell = false,
   maxVisible = 3,
 }: SelectedSkillBadgesProps) {
   const { t } = useTranslation()
 
-  if (selectedSkillNames.length === 0) {
+  if (selectedSkills.length === 0) {
     return null
   }
 
-  // Create a map for quick skill lookup
-  const skillMap = new Map(skills.map(skill => [skill.name, skill]))
+  const skillMap = new Map(skills.map(skill => [skill.id, skill]))
 
   // Get display name for a skill
-  const getDisplayName = (skillName: string): string => {
-    const skill = skillMap.get(skillName)
-    return skill?.displayName || skillName
+  const getDisplayName = (skill: SkillRef): string => {
+    const matchedSkill =
+      typeof skill.skill_id === 'number' ? skillMap.get(skill.skill_id) : undefined
+    return matchedSkill?.displayName || skill.name
   }
 
   // Get description for a skill
-  const getDescription = (skillName: string): string | undefined => {
-    const skill = skillMap.get(skillName)
-    return skill?.description
+  const getDescription = (skill: SkillRef): string | undefined => {
+    const matchedSkill =
+      typeof skill.skill_id === 'number' ? skillMap.get(skill.skill_id) : undefined
+    return matchedSkill?.description
   }
 
   // Visible and hidden skills
-  const visibleSkills = selectedSkillNames.slice(0, maxVisible)
-  const hiddenSkills = selectedSkillNames.slice(maxVisible)
+  const visibleSkills = selectedSkills.slice(0, maxVisible)
+  const hiddenSkills = selectedSkills.slice(maxVisible)
   const hiddenCount = hiddenSkills.length
 
   // Hint text based on shell type
@@ -84,19 +86,19 @@ export default function SelectedSkillBadges({
         </Tooltip>
 
         {/* Visible skill badges */}
-        {visibleSkills.map(skillName => (
-          <Tooltip key={skillName}>
+        {visibleSkills.map(skill => (
+          <Tooltip key={getSkillRefKey(skill)}>
             <TooltipTrigger asChild>
               <Badge
                 variant="secondary"
                 className="flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs cursor-default hover:bg-muted"
               >
-                <span className="max-w-[100px] truncate">{getDisplayName(skillName)}</span>
+                <span className="max-w-[100px] truncate">{getDisplayName(skill)}</span>
                 <button
                   type="button"
                   onClick={e => {
                     e.stopPropagation()
-                    onRemove(skillName)
+                    onRemove(skill)
                   }}
                   className="ml-0.5 rounded-full p-0.5 hover:bg-background/80 transition-colors"
                   aria-label={t('common:skillSelector.remove_skill')}
@@ -105,9 +107,9 @@ export default function SelectedSkillBadges({
                 </button>
               </Badge>
             </TooltipTrigger>
-            {getDescription(skillName) && (
+            {getDescription(skill) && (
               <TooltipContent side="top" className="max-w-[250px]">
-                <p className="text-xs">{getDescription(skillName)}</p>
+                <p className="text-xs">{getDescription(skill)}</p>
               </TooltipContent>
             )}
           </Tooltip>
@@ -123,9 +125,9 @@ export default function SelectedSkillBadges({
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-[200px]">
               <div className="text-xs">
-                {hiddenSkills.map(skillName => (
-                  <div key={skillName} className="truncate">
-                    {getDisplayName(skillName)}
+                {hiddenSkills.map(skill => (
+                  <div key={getSkillRefKey(skill)} className="truncate">
+                    {getDisplayName(skill)}
                   </div>
                 ))}
               </div>

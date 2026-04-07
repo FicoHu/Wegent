@@ -1029,7 +1029,9 @@ function ChatAreaContent({
     availableSkills: skillSelector.availableSkills,
     teamSkillNames: skillSelector.teamSkillNames,
     preloadedSkillNames: skillSelector.preloadedSkillNames,
-    selectedSkillNames: skillSelector.selectedSkillNames,
+    teamSkills: skillSelector.teamSkills,
+    preloadedSkills: skillSelector.preloadedSkills,
+    selectedSkills: skillSelector.selectedSkills,
     onToggleSkill: skillSelector.toggleSkill,
     // Video mode props - only passed when taskType is 'video'
     // Note: videoModels is no longer passed - ModelSelector fetches models internally via useModelSelection

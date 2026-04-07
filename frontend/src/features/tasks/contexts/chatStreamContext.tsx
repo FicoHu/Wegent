@@ -112,6 +112,7 @@ export interface ChatMessageRequest {
   additional_skill_names?: string[]
   /** Additional skills with full info (name, namespace, is_public) - preferred over additional_skill_names */
   additional_skills?: Array<{
+    skill_id?: number
     name: string
     namespace: string
     is_public: boolean

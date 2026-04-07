@@ -29,6 +29,7 @@ import type { ContextItem } from '@/types/context'
 import type { UnifiedSkill } from '@/apis/skills'
 import { canUseChatContexts, isChatShell } from '../../service/messageService'
 import { supportsAttachments } from '../../service/attachmentService'
+import type { SkillRef } from '../../service/skillSelectionService'
 import { useIsMobile } from '@/features/layout/hooks/useMediaQuery'
 import { MobileChatInputControls } from './MobileChatInputControls'
 import SkillSelectorPopover, { SkillSelectorPopoverRef } from '../selector/SkillSelectorPopover'
@@ -119,8 +120,10 @@ export interface ChatInputControlsProps {
   availableSkills?: UnifiedSkill[]
   teamSkillNames?: string[]
   preloadedSkillNames?: string[]
-  selectedSkillNames?: string[]
-  onToggleSkill?: (skillName: string) => void
+  teamSkills?: SkillRef[]
+  preloadedSkills?: SkillRef[]
+  selectedSkills?: SkillRef[]
+  onToggleSkill?: (skill: SkillRef) => void
 
   // Ref for skill selector button (for fly animation)
   skillSelectorRef?: React.RefObject<SkillSelectorPopoverRef | null>
@@ -220,7 +223,9 @@ export function ChatInputControls({
   availableSkills = [],
   teamSkillNames = [],
   preloadedSkillNames = [],
-  selectedSkillNames = [],
+  teamSkills = [],
+  preloadedSkills = [],
+  selectedSkills = [],
   onToggleSkill,
   skillSelectorRef,
   // Video mode props
@@ -371,7 +376,9 @@ export function ChatInputControls({
         availableSkills={availableSkills}
         teamSkillNames={teamSkillNames}
         preloadedSkillNames={preloadedSkillNames}
-        selectedSkillNames={selectedSkillNames}
+        teamSkills={teamSkills}
+        preloadedSkills={preloadedSkills}
+        selectedSkills={selectedSkills}
         onToggleSkill={onToggleSkill}
         hideSelectors={hideSelectors}
       />
@@ -513,7 +520,9 @@ export function ChatInputControls({
                 skills={availableSkills}
                 teamSkillNames={teamSkillNames}
                 preloadedSkillNames={preloadedSkillNames}
-                selectedSkillNames={selectedSkillNames}
+                teamSkills={teamSkills}
+                preloadedSkills={preloadedSkills}
+                selectedSkills={selectedSkills}
                 onToggleSkill={onToggleSkill}
                 isChatShell={isChatShell(selectedTeam)}
                 disabled={isLoading || isStreaming}

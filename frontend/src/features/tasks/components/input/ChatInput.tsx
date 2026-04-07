@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Maximize2, Minimize2 } from 'lucide-react'
 import type { ChatTipItem, Team, TaskType } from '@/types/api'
 import type { UnifiedSkill } from '@/apis/skills'
+import type { SkillRef } from '../../service/skillSelectionService'
 import MentionAutocomplete from '../chat/MentionAutocomplete'
 import SkillAutocomplete, { SkillFlyAnimationTrigger } from '../chat/SkillAutocomplete'
 import SkillFlyAnimation from '../chat/SkillFlyAnimation'
@@ -44,8 +45,10 @@ interface ChatInputProps {
   availableSkills?: UnifiedSkill[]
   teamSkillNames?: string[]
   preloadedSkillNames?: string[]
-  selectedSkillNames?: string[]
-  onSkillSelect?: (skillName: string) => void
+  teamSkills?: SkillRef[]
+  preloadedSkills?: SkillRef[]
+  selectedSkills?: SkillRef[]
+  onSkillSelect?: (skill: SkillRef) => void
   isChatShell?: boolean
   /** Whether skill selector is read-only (can view but not modify via / command) */
   skillSelectorReadOnly?: boolean
@@ -78,7 +81,9 @@ export default function ChatInput({
   availableSkills = [],
   teamSkillNames = [],
   preloadedSkillNames = [],
-  selectedSkillNames = [],
+  teamSkills = [],
+  preloadedSkills = [],
+  selectedSkills = [],
   onSkillSelect,
   isChatShell = false,
   skillSelectorReadOnly = false,
@@ -457,7 +462,7 @@ export default function ChatInput({
 
   // Handle skill selection from autocomplete
   const handleSkillSelect = useCallback(
-    (skillName: string) => {
+    (skill: SkillRef) => {
       if (editableRef.current && onSkillSelect) {
         const currentText = getTextWithNewlines(editableRef.current)
         // Remove the /query from the text
@@ -479,7 +484,7 @@ export default function ChatInput({
         }
 
         // Call the skill selection callback
-        onSkillSelect(skillName)
+        onSkillSelect(skill)
 
         // Move cursor to end
         const selection = window.getSelection()
@@ -690,8 +695,10 @@ export default function ChatInput({
           skills={availableSkills}
           teamSkillNames={teamSkillNames}
           preloadedSkillNames={preloadedSkillNames}
+          teamSkills={teamSkills}
+          preloadedSkills={preloadedSkills}
           query={skillQuery}
-          selectedSkillNames={selectedSkillNames}
+          selectedSkills={selectedSkills}
           onSelect={handleSkillSelect}
           onClose={() => {
             setShowSkillMenu(false)

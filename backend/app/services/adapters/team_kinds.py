@@ -33,6 +33,7 @@ from app.services.adapters.task_kinds.running_tasks import get_running_tasks_for
 from app.services.base import BaseService
 from app.services.readers.kinds import KindType, kindReader
 from app.services.readers.users import userReader
+from app.services.skill_resolution import build_skill_ref_meta, find_skill_by_name
 from shared.utils.crypto import decrypt_sensitive_data, is_data_encrypted
 
 
@@ -2097,6 +2098,8 @@ class TeamKindsService(BaseService[Kind, TeamCreate, TeamUpdate]):
         team_crd = Team.model_validate(team.json)
         all_skills = set()
         all_preload_skills = set()
+        skill_refs_by_name: Dict[str, Dict[str, Any]] = {}
+        preload_skill_refs_by_name: Dict[str, Dict[str, Any]] = {}
 
         # Use team owner's user_id for querying related resources
         team_owner_id = team.user_id
@@ -2127,19 +2130,76 @@ class TeamKindsService(BaseService[Kind, TeamCreate, TeamUpdate]):
                 ghost_crd = Ghost.model_validate(ghost.json)
                 if ghost_crd.spec.skills:
                     all_skills.update(ghost_crd.spec.skills)
+                    ghost_skill_refs = getattr(ghost_crd.spec, "skill_refs", {}) or {}
+                    for skill_name in ghost_crd.spec.skills:
+                        explicit_ref = ghost_skill_refs.get(skill_name)
+                        if explicit_ref:
+                            skill_refs_by_name[skill_name] = explicit_ref.model_dump()
+                            continue
+
+                        skill = find_skill_by_name(
+                            db,
+                            skill_name=skill_name,
+                            owner_user_id=team_owner_id,
+                            team_namespace=team.namespace or "default",
+                        )
+                        if skill:
+                            skill_refs_by_name[skill_name] = build_skill_ref_meta(skill)
                 if ghost_crd.spec.preload_skills:
                     all_preload_skills.update(ghost_crd.spec.preload_skills)
+                    ghost_preload_refs = (
+                        getattr(ghost_crd.spec, "preload_skill_refs", {}) or {}
+                    )
+                    for skill_name in ghost_crd.spec.preload_skills:
+                        explicit_ref = ghost_preload_refs.get(skill_name)
+                        if explicit_ref:
+                            preload_skill_refs_by_name[skill_name] = (
+                                explicit_ref.model_dump()
+                            )
+                        elif skill_name in skill_refs_by_name:
+                            preload_skill_refs_by_name[skill_name] = skill_refs_by_name[
+                                skill_name
+                            ]
+                        else:
+                            skill = find_skill_by_name(
+                                db,
+                                skill_name=skill_name,
+                                owner_user_id=team_owner_id,
+                                team_namespace=team.namespace or "default",
+                            )
+                            if skill:
+                                preload_skill_refs_by_name[skill_name] = (
+                                    build_skill_ref_meta(skill)
+                                )
 
         logger.info(
             f"[get_team_skills] team_id={team_id}, "
             f"skills={list(all_skills)}, preload_skills={list(all_preload_skills)}"
         )
 
+        def _serialize_skill_refs(
+            ref_map: Dict[str, Dict[str, Any]],
+        ) -> List[Dict[str, Any]]:
+            serialized_refs = []
+            for skill_name in sorted(ref_map.keys()):
+                ref_meta = ref_map[skill_name]
+                serialized_refs.append(
+                    {
+                        "skill_id": ref_meta["skill_id"],
+                        "name": skill_name,
+                        "namespace": ref_meta["namespace"],
+                        "is_public": ref_meta["is_public"],
+                    }
+                )
+            return serialized_refs
+
         return {
             "team_id": team_id,
             "team_namespace": team.namespace or "default",
             "skills": sorted(all_skills),
             "preload_skills": sorted(all_preload_skills),
+            "skill_refs": _serialize_skill_refs(skill_refs_by_name),
+            "preload_skill_refs": _serialize_skill_refs(preload_skill_refs_by_name),
         }
 
 

@@ -26,7 +26,10 @@ from app.services.chat.task_default_knowledge_bases import (
     build_initial_task_knowledge_base_refs,
 )
 from app.services.readers import KindType, kindReader
-from app.services.task_skill_selection import build_task_skill_labels
+from app.services.task_skill_selection import (
+    build_task_skill_labels,
+    format_requested_skill_refs_for_log,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +282,12 @@ def create_new_task(
         knowledge_base_id=params.knowledge_base_id,
     )
 
+    task_skill_labels = build_task_skill_labels(params.additional_skills)
+    logger.info(
+        "[create_new_task] Task skill labels prepared: requested_skill_refs=%s",
+        format_requested_skill_refs_for_log(params.additional_skills),
+    )
+
     task_json = {
         "kind": "Task",
         "spec": {
@@ -327,7 +336,7 @@ def create_new_task(
                     if params.force_override_bot_model_type
                     else {}
                 ),
-                **build_task_skill_labels(params.additional_skills),
+                **task_skill_labels,
             },
         },
         "apiVersion": "agent.wecode.io/v1",

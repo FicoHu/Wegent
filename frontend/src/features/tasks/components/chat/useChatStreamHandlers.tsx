@@ -29,7 +29,7 @@ import type {
   TaskType,
 } from '@/types/api'
 import type { ContextItem } from '@/types/context'
-import type { SkillRef } from '../../hooks/useSkillSelector'
+import type { SkillRef } from '../../service/skillSelectionService'
 
 export interface UseChatStreamHandlersOptions {
   // Team and model

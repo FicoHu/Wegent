@@ -123,6 +123,15 @@ class TeamListResponse(BaseModel):
     items: list[TeamInDB]
 
 
+class TeamSkillRef(BaseModel):
+    """Precise team-visible skill reference."""
+
+    skill_id: int
+    name: str
+    namespace: str = "default"
+    is_public: bool = False
+
+
 class TeamSkillsResponse(BaseModel):
     """Response for GET /teams/{team_id}/skills endpoint.
 
@@ -134,3 +143,5 @@ class TeamSkillsResponse(BaseModel):
     team_namespace: str = "default"
     skills: List[str] = []  # All bot skills (deduplicated)
     preload_skills: List[str] = []  # Skills to preload
+    skill_refs: List[TeamSkillRef] = []
+    preload_skill_refs: List[TeamSkillRef] = []

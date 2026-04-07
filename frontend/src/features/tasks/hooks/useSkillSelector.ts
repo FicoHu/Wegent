@@ -9,16 +9,7 @@ import { fetchUnifiedSkillsList, UnifiedSkill } from '@/apis/skills'
 import { fetchTeamSkills, TeamSkillsResponse } from '@/apis/team'
 import type { Team } from '@/types/api'
 import { isChatShell } from '../service/messageService'
-
-/**
- * Skill reference with full identification info for backend
- * Backend needs name + namespace + is_public to uniquely identify a skill
- */
-export interface SkillRef {
-  name: string
-  namespace: string
-  is_public: boolean
-}
+import { isSameSkillRef, SkillRef, toSkillRef } from '../service/skillSelectionService'
 
 interface UseSkillSelectorOptions {
   /** Selected team for the current chat */
@@ -34,20 +25,22 @@ interface UseSkillSelectorReturn {
   teamSkillNames: string[]
   /** Team's preloaded skill names (auto-injected, to filter out for Chat Shell) */
   preloadedSkillNames: string[]
+  /** Team's configured skills with precise refs */
+  teamSkills: SkillRef[]
+  /** Team's preloaded skills with precise refs */
+  preloadedSkills: SkillRef[]
   /** Currently selected skill names */
   selectedSkillNames: string[]
   /** Currently selected skills with full info (name, namespace, is_public) */
   selectedSkills: SkillRef[]
   /** Add a skill to selection */
-  addSkill: (skillName: string) => void
+  addSkill: (skill: SkillRef) => void
   /** Remove a skill from selection */
-  removeSkill: (skillName: string) => void
+  removeSkill: (skill: SkillRef) => void
   /** Toggle a skill (add if not selected, remove if selected) */
-  toggleSkill: (skillName: string) => void
+  toggleSkill: (skill: SkillRef) => void
   /** Reset all selected skills */
   resetSkills: () => void
-  /** Set selected skill names directly */
-  setSelectedSkillNames: (skills: string[]) => void
   /** Whether the current team is a Chat Shell type */
   isChatShellType: boolean
   /** Loading state */
@@ -74,8 +67,8 @@ export function useSkillSelector({
   const [availableSkills, setAvailableSkills] = useState<UnifiedSkill[]>([])
   // State for team-specific skills (from backend)
   const [teamSkillsData, setTeamSkillsData] = useState<TeamSkillsResponse | null>(null)
-  // User-selected skill names
-  const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([])
+  // User-selected skills
+  const [selectedSkills, setSelectedSkills] = useState<SkillRef[]>([])
   // Loading and error states
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
@@ -85,19 +78,47 @@ export function useSkillSelector({
 
   // Team's configured skill names (from team skills API)
   const teamSkillNames = useMemo(() => {
-    if (teamSkillsData?.skills) {
-      return teamSkillsData.skills
-    }
-    return []
+    return Array.from(
+      new Set(
+        (teamSkillsData?.skill_refs ?? teamSkillsData?.skills ?? []).map(skill =>
+          typeof skill === 'string' ? skill : skill.name
+        )
+      )
+    )
   }, [teamSkillsData])
 
   // Team's preloaded skill names (auto-injected into system prompt)
   const preloadedSkillNames = useMemo(() => {
-    if (teamSkillsData?.preload_skills) {
-      return teamSkillsData.preload_skills
-    }
-    return []
+    return Array.from(
+      new Set(
+        (teamSkillsData?.preload_skill_refs ?? teamSkillsData?.preload_skills ?? []).map(skill =>
+          typeof skill === 'string' ? skill : skill.name
+        )
+      )
+    )
   }, [teamSkillsData])
+
+  const teamSkills = useMemo<SkillRef[]>(() => {
+    if (teamSkillsData?.skill_refs?.length) {
+      return teamSkillsData.skill_refs
+    }
+
+    return (teamSkillsData?.skills ?? [])
+      .map(name => availableSkills.find(skill => skill.name === name))
+      .filter((skill): skill is UnifiedSkill => !!skill)
+      .map(skill => toSkillRef(skill))
+  }, [availableSkills, teamSkillsData])
+
+  const preloadedSkills = useMemo<SkillRef[]>(() => {
+    if (teamSkillsData?.preload_skill_refs?.length) {
+      return teamSkillsData.preload_skill_refs
+    }
+
+    return (teamSkillsData?.preload_skills ?? [])
+      .map(name => availableSkills.find(skill => skill.name === name))
+      .filter((skill): skill is UnifiedSkill => !!skill)
+      .map(skill => toSkillRef(skill))
+  }, [availableSkills, teamSkillsData])
 
   // Fetch available skills when enabled
   useEffect(() => {
@@ -145,71 +166,74 @@ export function useSkillSelector({
 
   // Reset selected skills when team changes
   useEffect(() => {
-    setSelectedSkillNames([])
+    setSelectedSkills([])
   }, [team?.id])
 
   // Skill management callbacks
-  const addSkill = useCallback((skillName: string) => {
-    setSelectedSkillNames(prev => {
-      if (prev.includes(skillName)) return prev
-      return [...prev, skillName]
+  const addSkill = useCallback((skill: SkillRef) => {
+    setSelectedSkills(prev => {
+      if (prev.some(selected => isSameSkillRef(selected, skill))) {
+        return prev
+      }
+
+      // Only allow one selected variant per skill name.
+      return [...prev.filter(selected => selected.name !== skill.name), skill]
     })
   }, [])
 
-  const removeSkill = useCallback((skillName: string) => {
-    setSelectedSkillNames(prev => prev.filter(name => name !== skillName))
+  const removeSkill = useCallback((skill: SkillRef) => {
+    setSelectedSkills(prev => prev.filter(selected => !isSameSkillRef(selected, skill)))
   }, [])
 
-  const toggleSkill = useCallback((skillName: string) => {
-    setSelectedSkillNames(prev => {
-      if (prev.includes(skillName)) {
-        return prev.filter(name => name !== skillName)
+  const toggleSkill = useCallback((skill: SkillRef) => {
+    setSelectedSkills(prev => {
+      if (prev.some(selected => isSameSkillRef(selected, skill))) {
+        return prev.filter(selected => !isSameSkillRef(selected, skill))
       }
-      return [...prev, skillName]
+
+      return [...prev.filter(selected => selected.name !== skill.name), skill]
     })
   }, [])
 
   const resetSkills = useCallback(() => {
-    setSelectedSkillNames([])
+    setSelectedSkills([])
   }, [])
 
-  // Compute selected skills with full info (name, namespace, is_public)
-  // by looking up each selected skill name in availableSkills
-  const selectedSkills = useMemo<SkillRef[]>(() => {
-    return selectedSkillNames.map(name => {
-      const skill = availableSkills.find(s => s.name === name)
-      if (skill) {
-        return {
-          name: skill.name,
-          namespace: skill.namespace,
-          is_public: skill.is_public,
+  const normalizedSelectedSkills = useMemo<SkillRef[]>(() => {
+    const availableSkillMap = new Map(availableSkills.map(skill => [skill.id, skill]))
+
+    return selectedSkills.map(skill => {
+      if (typeof skill.skill_id === 'number') {
+        const availableSkill = availableSkillMap.get(skill.skill_id)
+        if (availableSkill) {
+          return toSkillRef(availableSkill)
         }
       }
-      // If skill not found in availableSkills, return with default values
-      // This shouldn't happen in normal usage, but provides a fallback
-      return {
-        name,
-        namespace: 'default',
-        is_public: false,
-      }
+
+      return skill
     })
-  }, [selectedSkillNames, availableSkills])
+  }, [availableSkills, selectedSkills])
+
+  const selectedSkillNames = useMemo(
+    () => normalizedSelectedSkills.map(skill => skill.name),
+    [normalizedSelectedSkills]
+  )
 
   return {
     availableSkills,
     teamSkillNames,
     preloadedSkillNames,
+    teamSkills,
+    preloadedSkills,
     selectedSkillNames,
-    selectedSkills,
+    selectedSkills: normalizedSelectedSkills,
     addSkill,
     removeSkill,
     toggleSkill,
     resetSkills,
-    setSelectedSkillNames,
     isChatShellType,
     isLoading,
     error,
   }
 }
-
-export type { UseSkillSelectorReturn }
+export type { UseSkillSelectorReturn, SkillRef }

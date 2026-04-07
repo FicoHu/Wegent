@@ -5,6 +5,7 @@
 import { apiClient } from './client'
 import type { TeamBot, Team, PaginationParams, TaskType } from '@/types/api'
 import type { CheckRunningTasksResponse } from './common'
+import type { SkillRef } from '@/features/tasks/service/skillSelectionService'
 
 // Team Request/Response Types
 export interface CreateTeamRequest {
@@ -66,6 +67,8 @@ export interface TeamSkillsResponse {
   team_namespace: string
   skills: string[] // All bot skills (deduplicated)
   preload_skills: string[] // Skills to preload
+  skill_refs?: SkillRef[]
+  preload_skill_refs?: SkillRef[]
 }
 
 export const teamApis = {

@@ -21,10 +21,12 @@ def normalize_requested_skill_refs(
 
     for skill in skills or []:
         if isinstance(skill, BaseModel):
+            skill_id = getattr(skill, "skill_id", None)
             name = getattr(skill, "name", None)
             namespace = getattr(skill, "namespace", "default")
             is_public = bool(getattr(skill, "is_public", False))
         else:
+            skill_id = skill.get("skill_id") if isinstance(skill, dict) else None
             name = skill.get("name") if isinstance(skill, dict) else None
             namespace = (
                 skill.get("namespace", "default")
@@ -45,6 +47,8 @@ def normalize_requested_skill_refs(
             "namespace": namespace or "default",
             "is_public": is_public,
         }
+        if isinstance(skill_id, int):
+            normalized_skill["skill_id"] = skill_id
         if name in normalized_by_name:
             del normalized_by_name[name]
         normalized_by_name[name] = normalized_skill
@@ -108,3 +112,37 @@ def parse_additional_skill_names_from_labels(
         return []
 
     return [skill for skill in parsed if isinstance(skill, str) and skill]
+
+
+def format_requested_skill_refs_for_log(
+    skills: Optional[List[Any]],
+) -> List[str]:
+    """Render skill refs to stable compact strings for logs."""
+    formatted_refs: List[str] = []
+
+    for skill in normalize_requested_skill_refs(skills):
+        skill_id = skill.get("skill_id")
+        skill_id_display = str(skill_id) if isinstance(skill_id, int) else "?"
+        formatted_refs.append(
+            f"{skill['name']}@{skill['namespace']}#{skill_id_display}"
+        )
+
+    return formatted_refs
+
+
+def format_skill_ref_map_for_log(
+    skill_refs: Optional[Dict[str, Dict[str, Any]]],
+) -> List[str]:
+    """Render resolved skill ref maps to stable compact strings for logs."""
+    if not skill_refs:
+        return []
+
+    formatted_refs: List[str] = []
+    for skill_name in sorted(skill_refs):
+        ref_meta = skill_refs[skill_name] or {}
+        namespace = ref_meta.get("namespace") or "default"
+        skill_id = ref_meta.get("skill_id")
+        skill_id_display = str(skill_id) if isinstance(skill_id, int) else "?"
+        formatted_refs.append(f"{skill_name}@{namespace}#{skill_id_display}")
+
+    return formatted_refs

@@ -28,7 +28,11 @@ from app.services.mcp_provider_registry import (
     list_mcp_providers,
 )
 from app.services.readers import KindType, kindReader
-from app.services.skill_resolution import find_skill_by_name, find_skill_by_ref
+from app.services.skill_resolution import (
+    find_skill_by_id,
+    find_skill_by_name,
+    find_skill_by_ref,
+)
 from app.services.user_mcp_service import user_mcp_service
 from shared.models import ExecutionRequest
 from shared.models.db import Kind, User
@@ -386,6 +390,8 @@ class TaskRequestBuilder:
                 "namespace": skill_ref.get("namespace", "default"),
                 "is_public": skill_ref.get("is_public", False),
             }
+            if isinstance(skill_ref.get("skill_id"), int):
+                explicit_ref["skill_id"] = skill_ref["skill_id"]
 
             if (
                 skill_name == SELECTED_KB_PRELOAD_SKILL
@@ -1019,11 +1025,13 @@ class TaskRequestBuilder:
                 # Handle both dict and Pydantic model (SkillRef)
                 if isinstance(add_skill, BaseModel):
                     # Pydantic model - access attributes directly
+                    skill_id = getattr(add_skill, "skill_id", None)
                     skill_name = add_skill.name
                     skill_namespace = getattr(add_skill, "namespace", "default")
                     is_public = getattr(add_skill, "is_public", False)
                 else:
                     # Dict - use .get() method
+                    skill_id = add_skill.get("skill_id")
                     skill_name = add_skill.get("name")
                     skill_namespace = add_skill.get("namespace", "default")
                     is_public = add_skill.get("is_public", False)
@@ -1037,13 +1045,20 @@ class TaskRequestBuilder:
                     if skill_name not in user_selected_skills:
                         user_selected_skills.append(skill_name)
                     # Explicit user selection should override same-name skill reference
-                    resolved_selected_skill = self._find_skill_by_ref(
-                        skill_name,
-                        skill_namespace,
-                        is_public,
-                        user_id,
-                        team_namespace=team_namespace,
-                    )
+                    if isinstance(skill_id, int):
+                        resolved_selected_skill = self._find_skill_by_id(
+                            skill_id,
+                            user_id,
+                            team_namespace=team_namespace,
+                        )
+                    else:
+                        resolved_selected_skill = self._find_skill_by_ref(
+                            skill_name,
+                            skill_namespace,
+                            is_public,
+                            user_id,
+                            team_namespace=team_namespace,
+                        )
                     if resolved_selected_skill:
                         skill_refs[skill_name] = {
                             "skill_id": getattr(resolved_selected_skill, "id", None),
@@ -1062,13 +1077,20 @@ class TaskRequestBuilder:
                     continue
 
                 # Find and add new skill (with team_namespace fallback)
-                skill = self._find_skill_by_ref(
-                    skill_name,
-                    skill_namespace,
-                    is_public,
-                    user_id,
-                    team_namespace=team_namespace,
-                )
+                if isinstance(skill_id, int):
+                    skill = self._find_skill_by_id(
+                        skill_id,
+                        user_id,
+                        team_namespace=team_namespace,
+                    )
+                else:
+                    skill = self._find_skill_by_ref(
+                        skill_name,
+                        skill_namespace,
+                        is_public,
+                        user_id,
+                        team_namespace=team_namespace,
+                    )
                 if skill:
                     skill_data = self._build_skill_data(skill, user=user)
                     skills.append(skill_data)
@@ -1089,7 +1111,8 @@ class TaskRequestBuilder:
                     )
                 else:
                     logger.warning(
-                        "[_get_bot_skills] User-selected skill not found: name=%s, namespace=%s, is_public=%s, team_namespace=%s",
+                        "[_get_bot_skills] User-selected skill not found: skill_id=%s, name=%s, namespace=%s, is_public=%s, team_namespace=%s",
+                        skill_id,
                         skill_name,
                         skill_namespace,
                         is_public,
@@ -1161,6 +1184,20 @@ class TaskRequestBuilder:
             skill_name=skill_name,
             namespace=namespace,
             is_public=is_public,
+            user_id=user_id,
+            team_namespace=team_namespace,
+        )
+
+    def _find_skill_by_id(
+        self,
+        skill_id: int,
+        user_id: int,
+        team_namespace: str | None = None,
+    ) -> Kind | None:
+        """Find a skill by exact id within the runtime visibility scope."""
+        return find_skill_by_id(
+            self.db,
+            skill_id=skill_id,
             user_id=user_id,
             team_namespace=team_namespace,
         )

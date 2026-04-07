@@ -9,6 +9,7 @@ Skills API endpoints for managing Claude Code Skills
 import io
 import logging
 import zipfile
+from collections import Counter
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -971,14 +972,14 @@ def list_unified_skills(
     - scope='all': personal + public + all user's groups
 
     Returns combined list with user/group skills first, then public skills.
-    User/group skills with same name take precedence over public skills.
+    Public skills are suppressed when a user/group-visible skill shares the same name.
     """
     from sqlalchemy import or_
 
     from app.services.group_permission import get_user_groups
 
     user_skills = []
-    user_skill_names = set()
+    user_visible_skill_names = set()
 
     # Build optimized query based on scope
     if scope == "personal":
@@ -1052,40 +1053,39 @@ def list_unified_skills(
 
     # Convert Kind objects to response format
     for kind in skill_kinds:
-        if kind.name not in user_skill_names:
-            user_skill_names.add(kind.name)
-            spec = kind.json.get("spec", {})
+        user_visible_skill_names.add(kind.name)
+        spec = kind.json.get("spec", {})
 
-            # Extract source information if available
-            source_data = spec.get("source")
-            source_info = None
-            if source_data:
-                source_info = {
-                    "type": source_data.get("type", "upload"),
-                    "repo_url": source_data.get("repo_url"),
-                    "skill_path": source_data.get("skill_path"),
-                    "imported_at": source_data.get("imported_at"),
-                }
+        # Extract source information if available
+        source_data = spec.get("source")
+        source_info = None
+        if source_data:
+            source_info = {
+                "type": source_data.get("type", "upload"),
+                "repo_url": source_data.get("repo_url"),
+                "skill_path": source_data.get("skill_path"),
+                "imported_at": source_data.get("imported_at"),
+            }
 
-            user_skills.append(
-                {
-                    "id": kind.id,
-                    "name": kind.name,
-                    "namespace": kind.namespace,
-                    "description": spec.get("description", ""),
-                    "displayName": spec.get("displayName"),
-                    "version": spec.get("version"),
-                    "author": spec.get("author"),
-                    "tags": spec.get("tags"),
-                    "bindShells": spec.get("bindShells"),
-                    "is_active": True,
-                    "is_public": False,
-                    "user_id": kind.user_id,
-                    "source": source_info,
-                    "created_at": kind.created_at,
-                    "updated_at": kind.updated_at,
-                }
-            )
+        user_skills.append(
+            {
+                "id": kind.id,
+                "name": kind.name,
+                "namespace": kind.namespace,
+                "description": spec.get("description", ""),
+                "displayName": spec.get("displayName"),
+                "version": spec.get("version"),
+                "author": spec.get("author"),
+                "tags": spec.get("tags"),
+                "bindShells": spec.get("bindShells"),
+                "is_active": True,
+                "is_public": False,
+                "user_id": kind.user_id,
+                "source": source_info,
+                "created_at": kind.created_at,
+                "updated_at": kind.updated_at,
+            }
+        )
 
     # Get public skills (user_id=0) - single query
     public_skill_kinds = (
@@ -1102,7 +1102,7 @@ def list_unified_skills(
 
     # Merge: public skills that don't exist in user's skills
     for kind in public_skill_kinds:
-        if kind.name not in user_skill_names:
+        if kind.name not in user_visible_skill_names:
             spec = kind.json.get("spec", {})
             user_skills.append(
                 {
@@ -1125,7 +1125,35 @@ def list_unified_skills(
             )
 
     # Apply pagination
-    return user_skills[skip : skip + limit]
+    paged_skills = user_skills[skip : skip + limit]
+
+    name_counts = Counter(skill["name"] for skill in paged_skills)
+    duplicate_names = sorted(name for name, count in name_counts.items() if count > 1)
+    if duplicate_names:
+        duplicate_entries = [
+            f"{skill['name']}@{skill['namespace']}#{skill['id']}/u{skill['user_id']}"
+            for skill in paged_skills
+            if name_counts[skill["name"]] > 1
+        ]
+        logger.info(
+            "[list_unified_skills] scope=%s group=%s user_id=%s returned=%s duplicate_names=%s duplicate_entries=%s",
+            scope,
+            group_name,
+            current_user.id,
+            len(paged_skills),
+            duplicate_names,
+            duplicate_entries,
+        )
+    else:
+        logger.info(
+            "[list_unified_skills] scope=%s group=%s user_id=%s returned=%s duplicate_names=[]",
+            scope,
+            group_name,
+            current_user.id,
+            len(paged_skills),
+        )
+
+    return paged_skills
 
 
 # ============================================================================

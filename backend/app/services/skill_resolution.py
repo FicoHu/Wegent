@@ -20,6 +20,42 @@ def build_skill_ref_meta(skill: Kind) -> Dict[str, Any]:
     }
 
 
+def find_skill_by_id(
+    db: Session,
+    *,
+    skill_id: int,
+    user_id: int,
+    team_namespace: str | None = None,
+) -> Kind | None:
+    """Find a skill by exact id within the caller's accessible runtime scope."""
+    skill = (
+        db.query(Kind)
+        .filter(
+            Kind.id == skill_id,
+            Kind.kind == "Skill",
+            Kind.is_active == True,  # noqa: E712
+        )
+        .first()
+    )
+    if not skill:
+        return None
+
+    if skill.user_id == 0 or skill.user_id == user_id:
+        return skill
+
+    if skill.namespace != "default":
+        return skill
+
+    if (
+        team_namespace
+        and team_namespace != "default"
+        and skill.namespace == team_namespace
+    ):
+        return skill
+
+    return None
+
+
 def find_skill_by_name(
     db: Session,
     *,
@@ -76,8 +112,19 @@ def find_skill_by_ref(
     is_public: bool,
     user_id: int,
     team_namespace: str | None = None,
+    skill_id: int | None = None,
 ) -> Kind | None:
     """Find a skill by explicit name/namespace/public metadata."""
+    if isinstance(skill_id, int):
+        exact_skill = find_skill_by_id(
+            db,
+            skill_id=skill_id,
+            user_id=user_id,
+            team_namespace=team_namespace,
+        )
+        if exact_skill:
+            return exact_skill
+
     if is_public:
         return (
             db.query(Kind)

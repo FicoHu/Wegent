@@ -23,6 +23,8 @@ from app.services.skill_resolution import (
 )
 from app.services.subscription.helpers import validate_subscription_for_read
 from app.services.task_skill_selection import (
+    format_requested_skill_refs_for_log,
+    format_skill_ref_map_for_log,
     parse_additional_skill_names_from_labels,
     parse_requested_skill_refs_from_labels,
 )
@@ -137,6 +139,12 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
     labels = task_crd.metadata.labels or {}
     requested_skill_refs = parse_requested_skill_refs_from_labels(labels)
     user_selected_skills = parse_additional_skill_names_from_labels(labels)
+    logger.info(
+        "[get_task_skills] Parsed task skill labels: task_id=%s, requested_skill_refs=%s, user_selected_skills=%s",
+        task_id,
+        format_requested_skill_refs_for_log(requested_skill_refs),
+        user_selected_skills,
+    )
 
     team = kindReader.get_by_name_and_namespace(
         db, task_owner_id, KindType.TEAM, team_namespace, team_name
@@ -163,6 +171,7 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
                 is_public=requested_ref["is_public"],
                 user_id=team_owner_id,
                 team_namespace=team_namespace or "default",
+                skill_id=requested_ref.get("skill_id"),
             )
             if skill:
                 ref_meta = build_skill_ref_meta(skill)
@@ -262,6 +271,7 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
                 is_public=requested_ref.is_public,
                 user_id=team_owner_id,
                 team_namespace=team.namespace or "default",
+                skill_id=getattr(requested_ref, "skill_id", None),
             )
             if skill:
                 ref_meta = build_skill_ref_meta(skill)
@@ -288,6 +298,7 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
                 is_public=requested_ref["is_public"],
                 user_id=team_owner_id,
                 team_namespace=team.namespace or "default",
+                skill_id=requested_ref.get("skill_id"),
             )
             if skill:
                 ref_meta = build_skill_ref_meta(skill)
@@ -314,18 +325,28 @@ def resolve_task_skills(db: Session, *, task_id: int, user_id: int) -> Dict[str,
         for skill_name, ref_meta in resolved_user_refs.items():
             preload_skill_refs[skill_name] = ref_meta
 
+    _backfill_missing_task_skill_refs(
+        db=db,
+        requester_user_id=user_id,
+        owner_user_id=team_owner_id,
+        team_namespace=team.namespace or "default",
+        skill_names=all_skills | all_preload_skills,
+        skill_refs=skill_refs,
+        preload_skill_refs=preload_skill_refs,
+    )
+
     for skill_name in list(all_preload_skills):
         if skill_name not in preload_skill_refs and skill_name in skill_refs:
             preload_skill_refs[skill_name] = skill_refs[skill_name]
 
     logger.info(
-        "[get_task_skills] Resolved task skills: task_id=%s, team_id=%s, skills=%s, preload_skills=%s, skill_refs=%s, preload_skill_refs=%s",
+        "[get_task_skills] Resolved task skills: task_id=%s, team_id=%s, skills=%s, preload_skills=%s, resolved_skill_refs=%s, resolved_preload_skill_refs=%s",
         task_id,
         team.id,
         list(all_skills),
         list(all_preload_skills),
-        list(skill_refs.keys()),
-        list(preload_skill_refs.keys()),
+        format_skill_ref_map_for_log(skill_refs),
+        format_skill_ref_map_for_log(preload_skill_refs),
     )
 
     return {
@@ -392,3 +413,122 @@ def _get_subscription_skill_refs_for_task(db: Session, *, task_id: int) -> List[
         return []
 
     return list(subscription_crd.spec.skillRefs or [])
+
+
+def _backfill_missing_task_skill_refs(
+    db: Session,
+    *,
+    requester_user_id: int,
+    owner_user_id: int,
+    team_namespace: str,
+    skill_names: Set[str],
+    skill_refs: Dict[str, Dict[str, Any]],
+    preload_skill_refs: Dict[str, Dict[str, Any]],
+) -> None:
+    """Backfill missing skill refs for task-scoped skills using best-effort lookup.
+
+    Explicit refs from Ghost/task labels always win. This helper only fills
+    names that still lack precise metadata, which prevents executor-side
+    fallback downloads from being limited to the task's team namespace.
+    """
+
+    missing_skill_names = sorted(
+        skill_name
+        for skill_name in skill_names
+        if skill_name not in skill_refs and skill_name not in preload_skill_refs
+    )
+    if not missing_skill_names:
+        return
+
+    from app.services.group_permission import get_user_groups
+
+    try:
+        accessible_group_namespaces = [
+            namespace
+            for namespace in get_user_groups(db, requester_user_id)
+            if namespace not in {"default", team_namespace}
+        ]
+    except Exception as exc:
+        logger.warning(
+            "[get_task_skills] Failed to load user groups for skill ref backfill: "
+            "task_user_id=%s, error=%s",
+            requester_user_id,
+            exc,
+        )
+        accessible_group_namespaces = []
+
+    for skill_name in missing_skill_names:
+        skill = _resolve_missing_task_skill_ref(
+            db=db,
+            skill_name=skill_name,
+            requester_user_id=requester_user_id,
+            owner_user_id=owner_user_id,
+            team_namespace=team_namespace,
+            accessible_group_namespaces=accessible_group_namespaces,
+        )
+        if not skill:
+            continue
+
+        ref_meta = build_skill_ref_meta(skill)
+        skill_refs[skill_name] = ref_meta
+        preload_skill_refs.setdefault(skill_name, ref_meta)
+
+
+def _resolve_missing_task_skill_ref(
+    db: Session,
+    *,
+    skill_name: str,
+    requester_user_id: int,
+    owner_user_id: int,
+    team_namespace: str,
+    accessible_group_namespaces: List[str],
+) -> Kind | None:
+    """Resolve a task skill ref when explicit metadata is missing."""
+
+    # Prefer owner-private skills in the default namespace.
+    skill = find_skill_by_ref(
+        db,
+        skill_name=skill_name,
+        namespace="default",
+        is_public=False,
+        user_id=owner_user_id,
+        team_namespace=team_namespace,
+    )
+    if skill:
+        return skill
+
+    # Then search the team's own namespace when it is group-scoped.
+    if team_namespace != "default":
+        skill = find_skill_by_ref(
+            db,
+            skill_name=skill_name,
+            namespace=team_namespace,
+            is_public=False,
+            user_id=owner_user_id,
+            team_namespace=team_namespace,
+        )
+        if skill:
+            return skill
+
+    # Finally, search any other groups the requesting user can access.
+    for namespace in accessible_group_namespaces:
+        skill = find_skill_by_ref(
+            db,
+            skill_name=skill_name,
+            namespace=namespace,
+            is_public=False,
+            user_id=owner_user_id,
+            team_namespace=team_namespace,
+        )
+        if skill:
+            return skill
+
+    # Public skills remain the lowest-priority fallback.
+    return find_skill_by_ref(
+        db,
+        skill_name=skill_name,
+        namespace="default",
+        is_public=True,
+        user_id=owner_user_id,
+        team_namespace=team_namespace,
+    )

@@ -65,6 +65,7 @@ from app.services.chat.operations import (
 from app.services.chat.rag import process_context_and_rag
 from app.services.chat.storage import session_manager
 from app.services.chat.storage.db import get_db_session, run_sync_in_executor
+from app.services.task_skill_selection import format_requested_skill_refs_for_log
 from app.utils.prompt_utils import extract_display_prompt
 from shared.telemetry.context import (
     set_request_context,
@@ -623,9 +624,19 @@ class ChatNamespace(socketio.AsyncNamespace):
             additional_skills_dicts = None
             if payload.additional_skills:
                 additional_skills_dicts = [
-                    {"name": s.name, "namespace": s.namespace, "is_public": s.is_public}
+                    {
+                        "skill_id": s.skill_id,
+                        "name": s.name,
+                        "namespace": s.namespace,
+                        "is_public": s.is_public,
+                    }
                     for s in payload.additional_skills
                 ]
+            logger.info(
+                "[WS] chat:send requested skill refs: task_id=%s, requested_skill_refs=%s",
+                payload.task_id,
+                format_requested_skill_refs_for_log(additional_skills_dicts),
+            )
 
             # For pipeline mode, use the bot_ids from pipeline_info
             pipeline_bot_ids = None

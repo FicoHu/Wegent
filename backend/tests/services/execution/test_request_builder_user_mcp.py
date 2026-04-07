@@ -407,6 +407,82 @@ class TestUserScopedMcpInjection:
             }
         }
 
+    def test_get_bot_skills_prefers_explicit_skill_id_for_user_selected_skill(
+        self, test_db, mocker
+    ):
+        builder = TaskRequestBuilder(test_db)
+        team = SimpleNamespace(user_id=2, namespace="default")
+        bot = SimpleNamespace(
+            name="chat-bot",
+            json={
+                "kind": "Bot",
+                "metadata": {"name": "chat-bot", "namespace": "default"},
+                "spec": {
+                    "ghostRef": {"name": "ghost", "namespace": "default"},
+                    "shellRef": {"name": "Chat", "namespace": "default"},
+                },
+            },
+        )
+        ghost = SimpleNamespace(
+            name="ghost",
+            json={
+                "kind": "Ghost",
+                "metadata": {"name": "ghost", "namespace": "default"},
+                "spec": {
+                    "systemPrompt": "You are a test ghost.",
+                    "skills": [],
+                    "preload_skills": [],
+                },
+            },
+        )
+        skill = SimpleNamespace(
+            id=202, name="recday_new", namespace="skill-beta", user_id=2
+        )
+
+        mock_query = mocker.Mock()
+        mock_query.filter.return_value.first.return_value = ghost
+        mocker.patch.object(builder.db, "query", return_value=mock_query)
+        find_skill_by_ref = mocker.patch.object(builder, "_find_skill_by_ref")
+        find_skill_by_id = mocker.patch.object(
+            builder, "_find_skill_by_id", return_value=skill
+        )
+        mocker.patch.object(
+            builder, "_build_skill_data", return_value={"name": "recday_new"}
+        )
+
+        (
+            skills,
+            preload_skills,
+            user_selected_skills,
+            skill_refs,
+        ) = builder._get_bot_skills(
+            bot=bot,
+            team=team,
+            user=SimpleNamespace(preferences="{}"),
+            user_id=2,
+            user_preload_skills=[
+                {
+                    "skill_id": 202,
+                    "name": "recday_new",
+                    "namespace": "skill-alpha",
+                    "is_public": False,
+                }
+            ],
+        )
+
+        find_skill_by_id.assert_called_once_with(202, 2, team_namespace="default")
+        find_skill_by_ref.assert_not_called()
+        assert skills == [{"name": "recday_new"}]
+        assert preload_skills == ["recday_new"]
+        assert user_selected_skills == ["recday_new"]
+        assert skill_refs == {
+            "recday_new": {
+                "skill_id": 202,
+                "namespace": "skill-beta",
+                "is_public": False,
+            }
+        }
+
     def test_get_bot_skills_returns_four_tuple_when_ghost_not_found(
         self, test_db, mocker
     ):

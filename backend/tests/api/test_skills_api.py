@@ -589,6 +589,58 @@ tags: ["api", "test"]
         assert payload["spec"]["description"] == "Updated by group owner"
         assert payload["spec"]["version"] == "2.0.0"
 
+    def test_list_unified_skills_keeps_same_name_entries_from_different_namespaces(
+        self,
+        test_client: TestClient,
+        test_db: Session,
+        test_user: User,
+        test_token: str,
+    ):
+        group_alpha = _create_group(test_db, test_user, "skill-alpha")
+        group_beta = _create_group(test_db, test_user, "skill-beta")
+        _add_group_member(test_db, group_alpha, test_user, "Owner")
+        _add_group_member(test_db, group_beta, test_user, "Owner")
+
+        for skill_id, namespace in enumerate(("skill-alpha", "skill-beta"), start=101):
+            test_db.add(
+                Kind(
+                    id=skill_id,
+                    user_id=test_user.id,
+                    kind="Skill",
+                    name="recday_new",
+                    namespace=namespace,
+                    is_active=True,
+                    json={
+                        "apiVersion": "agent.wecode.io/v1",
+                        "kind": "Skill",
+                        "metadata": {
+                            "name": "recday_new",
+                            "namespace": namespace,
+                        },
+                        "spec": {
+                            "description": f"Shared name skill in {namespace}",
+                        },
+                        "status": {"state": "Available"},
+                    },
+                )
+            )
+        test_db.commit()
+
+        response = test_client.get(
+            "/api/v1/kinds/skills/unified?scope=all",
+            headers={"Authorization": f"Bearer {test_token}"},
+        )
+
+        assert response.status_code == 200
+        recday_entries = [
+            item for item in response.json() if item["name"] == "recday_new"
+        ]
+        assert len(recday_entries) == 2
+        assert {item["namespace"] for item in recday_entries} == {
+            "skill-alpha",
+            "skill-beta",
+        }
+
     def test_group_owner_can_remove_references_then_delete_member_skill(
         self,
         test_client: TestClient,

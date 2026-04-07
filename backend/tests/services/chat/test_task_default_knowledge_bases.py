@@ -246,3 +246,49 @@ def test_create_new_task_writes_initial_knowledge_base_refs_for_chat_tasks():
                 )
 
     assert [ref["id"] for ref in task.json["spec"]["knowledgeBaseRefs"]] == [11, 22]
+
+
+def test_create_new_task_logs_requested_skill_refs(caplog):
+    db = Mock()
+    user = _make_user()
+    team = _make_team()
+
+    placeholder_query = Mock()
+    placeholder_query.filter.return_value = placeholder_query
+    placeholder_query.first.return_value = None
+    db.query.return_value = placeholder_query
+
+    params = TaskCreationParams(
+        message="hello",
+        task_type="chat",
+        additional_skills=[
+            {
+                "skill_id": 190468,
+                "name": "recday_new",
+                "namespace": "sinarecmd",
+                "is_public": False,
+            }
+        ],
+    )
+
+    with patch(
+        "app.services.adapters.task_kinds.task_kinds_service.create_task_id",
+        return_value=123,
+    ):
+        with patch(
+            "app.services.adapters.task_kinds.task_kinds_service.validate_task_id",
+            return_value=True,
+        ):
+            with patch(
+                "app.services.chat.storage.task_manager.build_initial_task_knowledge_base_refs",
+                return_value=[],
+            ):
+                with caplog.at_level("INFO"):
+                    create_new_task(
+                        db=db,
+                        user=user,
+                        team=team,
+                        params=params,
+                    )
+
+    assert "requested_skill_refs=['recday_new@sinarecmd#190468']" in caplog.text

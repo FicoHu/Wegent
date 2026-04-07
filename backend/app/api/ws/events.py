@@ -111,9 +111,11 @@ class ContextItem(BaseModel):
 class SkillRef(BaseModel):
     """Skill reference with full identification info for backend.
 
-    Backend needs name + namespace + is_public to uniquely identify a skill.
+    `skill_id` is preferred when present because same-name skills may exist
+    across multiple namespaces or owners.
     """
 
+    skill_id: Optional[int] = Field(None, description="Unique skill ID (Kind.id)")
     name: str = Field(..., description="Skill name")
     namespace: str = Field(..., description="Skill namespace")
     is_public: bool = Field(..., description="Whether the skill is public")
@@ -182,7 +184,7 @@ class ChatSendPayload(BaseModel):
     )
     additional_skills: Optional[List[SkillRef]] = Field(
         None,
-        description="Additional skills with full info (name, namespace, is_public)",
+        description="Additional skills with full info (skill_id, name, namespace, is_public)",
     )
     # Local device execution
     device_id: Optional[str] = Field(

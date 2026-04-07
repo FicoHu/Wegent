@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
+import logging
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -258,7 +259,128 @@ def test_resolve_task_skills_returns_refs_for_ghost_task_and_subscription_source
     assert result["skill_refs"]["manual-skill"]["skill_id"] == 22
     assert result["preload_skill_refs"]["manual-skill"]["skill_id"] == 22
     assert result["skill_refs"]["subscription-skill"]["skill_id"] == 33
-    assert result["preload_skill_refs"]["subscription-skill"]["skill_id"] == 33
+
+
+@pytest.mark.unit
+def test_resolve_task_skills_logs_requested_and_resolved_skill_refs(caplog):
+    db = Mock(spec=Session)
+
+    mock_task = Mock(spec=TaskResource)
+    mock_task.id = 123
+    mock_task.user_id = 7
+    mock_task.kind = "Task"
+    mock_task.is_active = TaskResource.STATE_ACTIVE
+    mock_task.json = {"kind": "Task"}
+
+    mock_task_query = Mock()
+    mock_task_query.filter.return_value = mock_task_query
+    mock_task_query.first.return_value = mock_task
+    db.query.return_value = mock_task_query
+
+    task_crd = SimpleNamespace(
+        spec=SimpleNamespace(
+            teamRef=SimpleNamespace(name="team-a", namespace="team-a"),
+        ),
+        metadata=SimpleNamespace(
+            labels={
+                "additionalSkills": json.dumps(["manual-skill"]),
+                "requestedSkillRefs": json.dumps(
+                    [
+                        {
+                            "skill_id": 22,
+                            "name": "manual-skill",
+                            "namespace": "team-a",
+                            "is_public": False,
+                        }
+                    ]
+                ),
+            }
+        ),
+    )
+    team_crd = SimpleNamespace(
+        spec=SimpleNamespace(
+            members=[
+                SimpleNamespace(
+                    botRef=SimpleNamespace(name="bot-a", namespace="default")
+                )
+            ]
+        )
+    )
+
+    bot_a = _build_kind(7, {"kind": "Bot", "name": "bot-a"})
+    ghost_a = _build_kind(7, {"kind": "Ghost", "name": "ghost-a"})
+    bot_crd_a = SimpleNamespace(
+        spec=SimpleNamespace(
+            ghostRef=SimpleNamespace(name="ghost-a", namespace="default")
+        )
+    )
+    ghost_crd_a = SimpleNamespace(
+        spec=SimpleNamespace(
+            skills=["ghost-skill"],
+            preload_skills=["ghost-skill"],
+            skill_refs={
+                "ghost-skill": SkillRefMeta(
+                    skill_id=11, namespace="team-a", is_public=False
+                )
+            },
+            preload_skill_refs={
+                "ghost-skill": SkillRefMeta(
+                    skill_id=12, namespace="team-a", is_public=False
+                )
+            },
+        )
+    )
+
+    with (
+        patch(
+            "app.services.task_member_service.task_member_service.is_member",
+            return_value=True,
+        ),
+        patch(
+            "app.services.readers.kinds.kindReader.get_by_name_and_namespace",
+            return_value=_build_kind(7, {"kind": "Team"}),
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Task.model_validate",
+            return_value=task_crd,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Team.model_validate",
+            return_value=team_crd,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Bot.model_validate",
+            return_value=bot_crd_a,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Ghost.model_validate",
+            return_value=ghost_crd_a,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver._batch_load_kinds_by_refs",
+            create=True,
+            side_effect=[
+                {("default", "bot-a"): bot_a},
+                {("default", "ghost-a"): ghost_a},
+            ],
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver._get_subscription_skill_refs_for_task",
+            return_value=[],
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.find_skill_by_ref",
+            return_value=SimpleNamespace(id=22, namespace="team-a", user_id=7),
+        ),
+        caplog.at_level(logging.INFO),
+    ):
+        resolve_task_skills(db, task_id=123, user_id=99)
+
+    assert "requested_skill_refs=['manual-skill@team-a#22']" in caplog.text
+    assert (
+        "resolved_skill_refs=['ghost-skill@team-a#11', 'manual-skill@team-a#22']"
+        in caplog.text
+    )
 
 
 @pytest.mark.unit
@@ -509,3 +631,85 @@ def test_resolve_task_skills_uses_team_owner_for_shared_team_skill_resolution():
     assert result["skill_refs"]["owner-private-skill"]["skill_id"] == 55
     assert result["preload_skill_refs"]["owner-private-skill"]["skill_id"] == 55
     assert mock_find_skill_by_ref.call_args.kwargs["user_id"] == 7
+
+
+@pytest.mark.unit
+def test_resolve_task_skills_backfills_group_skill_refs_for_default_namespace_tasks():
+    db = Mock(spec=Session)
+
+    mock_task = Mock(spec=TaskResource)
+    mock_task.id = 123
+    mock_task.user_id = 7
+    mock_task.kind = "Task"
+    mock_task.is_active = TaskResource.STATE_ACTIVE
+    mock_task.json = {"kind": "Task"}
+
+    mock_task_query = Mock()
+    mock_task_query.filter.return_value = mock_task_query
+    mock_task_query.first.return_value = mock_task
+    db.query.return_value = mock_task_query
+
+    task_crd = SimpleNamespace(
+        spec=SimpleNamespace(
+            teamRef=SimpleNamespace(name="team-a", namespace="default"),
+        ),
+        metadata=SimpleNamespace(
+            labels={
+                "additionalSkills": json.dumps(["recday_new"]),
+            }
+        ),
+    )
+    team_crd = SimpleNamespace(spec=SimpleNamespace(members=[]))
+    team_kind = _build_kind(7, {"kind": "Team", "name": "team-a"})
+
+    with (
+        patch(
+            "app.services.task_member_service.task_member_service.is_member",
+            return_value=True,
+        ),
+        patch(
+            "app.services.readers.kinds.kindReader.get_by_name_and_namespace",
+            return_value=team_kind,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Task.model_validate",
+            return_value=task_crd,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.Team.model_validate",
+            return_value=team_crd,
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver._batch_load_kinds_by_refs",
+            create=True,
+            side_effect=[{}, {}],
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver._get_subscription_skill_refs_for_task",
+            return_value=[],
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.resolve_skill_refs_by_names",
+            return_value={},
+        ),
+        patch(
+            "app.services.adapters.task_kinds.task_skills_resolver.find_skill_by_ref",
+            side_effect=[
+                None,
+                SimpleNamespace(id=88, namespace="analytics", user_id=7),
+            ],
+        ) as mock_find_skill_by_ref,
+        patch(
+            "app.services.group_permission.get_user_groups",
+            return_value=["analytics"],
+        ),
+    ):
+        result = resolve_task_skills(db, task_id=123, user_id=7)
+
+    assert result["skills"] == ["recday_new"]
+    assert result["preload_skills"] == ["recday_new"]
+    assert result["skill_refs"]["recday_new"]["skill_id"] == 88
+    assert result["skill_refs"]["recday_new"]["namespace"] == "analytics"
+    assert result["preload_skill_refs"]["recday_new"]["skill_id"] == 88
+    assert mock_find_skill_by_ref.call_args_list[0].kwargs["namespace"] == "default"
+    assert mock_find_skill_by_ref.call_args_list[1].kwargs["namespace"] == "analytics"

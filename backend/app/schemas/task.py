@@ -17,9 +17,11 @@ from app.schemas.user import UserInDB
 class SkillRef(BaseModel):
     """Skill reference with full identification info.
 
-    Backend needs name + namespace + is_public to uniquely identify a skill.
+    `skill_id` is preferred when present because same-name skills may exist
+    across multiple namespaces or owners.
     """
 
+    skill_id: Optional[int] = None
     name: str
     namespace: str
     is_public: bool

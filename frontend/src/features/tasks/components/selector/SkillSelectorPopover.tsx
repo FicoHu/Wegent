@@ -14,6 +14,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ActionButton } from '@/components/ui/action-button'
 import { Button } from '@/components/ui/button'
 import type { UnifiedSkill } from '@/apis/skills'
+import {
+  getUnifiedSkillKey,
+  isSameSkillRef,
+  SkillRef,
+  toSkillRef,
+} from '../../service/skillSelectionService'
 import Link from 'next/link'
 
 interface SkillSelectorPopoverProps {
@@ -23,10 +29,14 @@ interface SkillSelectorPopoverProps {
   teamSkillNames: string[]
   /** Already preloaded skill names (filter out for ChatShell) */
   preloadedSkillNames: string[]
+  /** Team's configured skills with precise refs */
+  teamSkills?: SkillRef[]
+  /** Team's preloaded skills with precise refs */
+  preloadedSkills?: SkillRef[]
   /** Currently selected skill names */
-  selectedSkillNames: string[]
+  selectedSkills: SkillRef[]
   /** Callback when a skill is toggled */
-  onToggleSkill: (skillName: string) => void
+  onToggleSkill: (skill: SkillRef) => void
   /** Whether this is a Chat Shell (affects filtering behavior) */
   isChatShell: boolean
   /** Whether the selector is disabled (cannot open popover) */
@@ -63,7 +73,9 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
       skills,
       teamSkillNames,
       preloadedSkillNames,
-      selectedSkillNames,
+      teamSkills = [],
+      preloadedSkills = [],
+      selectedSkills,
       onToggleSkill,
       isChatShell,
       disabled = false,
@@ -83,25 +95,42 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
 
     // Group and filter skills
     const groupedSkills = useMemo<GroupedSkill[]>(() => {
+      const teamSkillSet = new Set(teamSkillNames)
+      const teamSkillKeys = new Set(teamSkills.map(skill => skill.skill_id))
+      const preloadedSkillKeys = new Set(preloadedSkills.map(skill => skill.skill_id))
+
       // For Chat Shell, filter out preloaded skills (they're auto-injected)
       const filteredSkills = isChatShell
-        ? skills.filter(skill => !preloadedSkillNames.includes(skill.name))
+        ? skills.filter(skill => {
+            if (typeof skill.id === 'number' && preloadedSkillKeys.size > 0) {
+              return !preloadedSkillKeys.has(skill.id)
+            }
+
+            return !preloadedSkillNames.includes(skill.name)
+          })
         : skills
 
-      // Create a set of team skill names for fast lookup
-      const teamSkillSet = new Set(teamSkillNames)
-
       // Group skills
+      const seenSkillKeys = new Set<string>()
       const grouped: GroupedSkill[] = []
-      const teamSkills: GroupedSkill[] = []
+      const groupedTeamSkills: GroupedSkill[] = []
       const personalSkills: GroupedSkill[] = []
       // Use Map to group skills by namespace for proper ordering
       const groupSkillsByNamespace: Map<string, GroupedSkill[]> = new Map()
       const publicSkills: GroupedSkill[] = []
 
       for (const skill of filteredSkills) {
-        if (teamSkillSet.has(skill.name)) {
-          teamSkills.push({ skill, group: 'team' })
+        const stableSkillKey = getUnifiedSkillKey(skill)
+        if (seenSkillKeys.has(stableSkillKey)) {
+          continue
+        }
+        seenSkillKeys.add(stableSkillKey)
+
+        if (
+          (typeof skill.id === 'number' && teamSkillKeys.size > 0 && teamSkillKeys.has(skill.id)) ||
+          (teamSkillKeys.size === 0 && teamSkillSet.has(skill.name))
+        ) {
+          groupedTeamSkills.push({ skill, group: 'team' })
         } else if (skill.is_public) {
           publicSkills.push({ skill, group: 'public' })
         } else if (skill.namespace && skill.namespace !== 'default') {
@@ -126,9 +155,9 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
       }
 
       // Sort: Team -> Personal -> Group (by namespace) -> Public
-      grouped.push(...teamSkills, ...personalSkills, ...groupSkills, ...publicSkills)
+      grouped.push(...groupedTeamSkills, ...personalSkills, ...groupSkills, ...publicSkills)
       return grouped
-    }, [skills, teamSkillNames, preloadedSkillNames, isChatShell])
+    }, [skills, teamSkillNames, preloadedSkillNames, teamSkills, preloadedSkills, isChatShell])
 
     // Filter by search query
     const filteredSkills = useMemo(() => {
@@ -173,7 +202,7 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
       }
     }
 
-    const selectedCount = selectedSkillNames.length
+    const selectedCount = selectedSkills.length
     const hasSkills = groupedSkills.length > 0
 
     // Render grouped skills with section headers
@@ -213,7 +242,7 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
 
           elements.push(
             <div
-              key={group === 'group' ? `header-${group}-${skill.namespace}` : `header-${group}`}
+              key={`header-${elements.length}`}
               className="px-2 py-1.5 text-xs text-text-muted font-medium flex items-center gap-1.5 border-t border-border first:border-t-0 mt-1 first:mt-0"
             >
               {getGroupIcon(group)}
@@ -222,15 +251,16 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
           )
         }
 
-        const isSelected = selectedSkillNames.includes(skill.name)
+        const skillRef = toSkillRef(skill)
+        const isSelected = selectedSkills.some(selected => isSameSkillRef(selected, skillRef))
 
         elements.push(
           <div
-            key={skill.name}
+            key={`skill-${elements.length}`}
             className={`flex items-center gap-2 px-2 py-2 rounded-md transition-colors ${
               readOnly ? 'cursor-default' : 'cursor-pointer'
             } ${isSelected ? 'bg-primary/10' : readOnly ? '' : 'hover:bg-muted'}`}
-            onClick={readOnly ? undefined : () => onToggleSkill(skill.name)}
+            onClick={readOnly ? undefined : () => onToggleSkill(skillRef)}
             role={readOnly ? undefined : 'button'}
             tabIndex={readOnly ? -1 : 0}
             onKeyDown={
@@ -239,7 +269,7 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
                 : e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      onToggleSkill(skill.name)
+                      onToggleSkill(skillRef)
                     }
                   }
             }
@@ -263,6 +293,35 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
             </div>
           </div>
         )
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        const duplicateNames = filteredSkills
+          .map(({ skill }) => skill.name)
+          .filter((name, index, names) => names.indexOf(name) !== index)
+
+        if (duplicateNames.length > 0) {
+          const debugPayload = {
+            duplicateNames,
+            elementKeys: elements
+              .map(element => (React.isValidElement(element) ? String(element.key) : null))
+              .filter(Boolean),
+            skills: filteredSkills.map(({ skill, group }) => ({
+              id: skill.id,
+              name: skill.name,
+              namespace: skill.namespace,
+              user_id: skill.user_id,
+              group,
+            })),
+          }
+
+          if (typeof window !== 'undefined') {
+            ;(window as Window & { __skillSelectorDebug?: unknown }).__skillSelectorDebug =
+              debugPayload
+          }
+
+          console.warn('[SkillSelectorPopover debug 2026-04-07]', debugPayload)
+        }
       }
 
       return elements

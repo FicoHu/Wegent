@@ -139,6 +139,24 @@ class TaskSkillsInfo:
     preload_skill_refs: Dict[str, Dict[str, Any]]
 
 
+def format_skill_ref_map_for_log(
+    skill_refs: Optional[Dict[str, Dict[str, Any]]],
+) -> List[str]:
+    """Render resolved skill refs to stable compact strings for logs."""
+    if not skill_refs:
+        return []
+
+    formatted_refs: List[str] = []
+    for skill_name in sorted(skill_refs):
+        ref_meta = skill_refs[skill_name] or {}
+        namespace = ref_meta.get("namespace") or "default"
+        skill_id = ref_meta.get("skill_id")
+        skill_id_display = str(skill_id) if isinstance(skill_id, int) else "?"
+        formatted_refs.append(f"{skill_name}@{namespace}#{skill_id_display}")
+
+    return formatted_refs
+
+
 def fetch_task_skills(task_id: str, auth_token: str) -> TaskSkillsInfo:
     """Fetch task-associated skills via Backend API.
 
@@ -184,8 +202,8 @@ def fetch_task_skills(task_id: str, auth_token: str) -> TaskSkillsInfo:
                 f"[fetch_task_skills] Fetched skills for task {task_id}: "
                 f"skills={data.get('skills', [])}, "
                 f"preload_skills={data.get('preload_skills', [])}, "
-                f"skill_refs_count={len(data.get('skill_refs', {}) or {})}, "
-                f"preload_skill_refs_count={len(data.get('preload_skill_refs', {}) or {})}"
+                f"skill_refs={format_skill_ref_map_for_log(data.get('skill_refs', {}) or {})}, "
+                f"preload_skill_refs={format_skill_ref_map_for_log(data.get('preload_skill_refs', {}) or {})}"
             )
             return TaskSkillsInfo(
                 task_id=data.get(

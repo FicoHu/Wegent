@@ -188,7 +188,11 @@ def _initialize_sandbox_claude(auth_token: str, task_id: str) -> None:
         auth_token: JWT token for API authentication
         task_id: Task ID for fetching associated skills
     """
-    from executor.services.api_client import SkillDownloader, fetch_task_skills
+    from executor.services.api_client import (
+        SkillDownloader,
+        fetch_task_skills,
+        format_skill_ref_map_for_log,
+    )
 
     # Fetch skills via API
     logger.info(f"[SandboxInit] Fetching skills for task {task_id}...")
@@ -196,6 +200,8 @@ def _initialize_sandbox_claude(auth_token: str, task_id: str) -> None:
     logger.info(
         f"[SandboxInit] Skills info: skills={skills_info.skills}, "
         f"preload_skills={skills_info.preload_skills}, "
+        f"skill_refs={format_skill_ref_map_for_log(skills_info.skill_refs)}, "
+        f"preload_skill_refs={format_skill_ref_map_for_log(skills_info.preload_skill_refs)}, "
         f"team_namespace={skills_info.team_namespace}"
     )
 
@@ -219,8 +225,8 @@ def _initialize_sandbox_claude(auth_token: str, task_id: str) -> None:
         **(skills_info.preload_skill_refs or {}),
     }
     logger.info(
-        "[SandboxInit] Resolved skill map prepared: keys=%s",
-        sorted(resolved_skill_map.keys()),
+        "[SandboxInit] Resolved skill map prepared: refs=%s",
+        format_skill_ref_map_for_log(resolved_skill_map),
     )
     result = downloader.download_and_deploy(
         all_skills,

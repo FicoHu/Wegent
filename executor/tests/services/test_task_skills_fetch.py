@@ -4,7 +4,10 @@
 
 from unittest.mock import Mock
 
-from executor.services.api_client import fetch_task_skills
+from executor.services.api_client import (
+    fetch_task_skills,
+    format_skill_ref_map_for_log,
+)
 
 
 def test_fetch_task_skills_returns_ref_metadata(monkeypatch):
@@ -43,3 +46,24 @@ def test_fetch_task_skills_returns_ref_metadata(monkeypatch):
     assert result.team_namespace == "team-a"
     assert result.skill_refs["ghost-skill"]["skill_id"] == 11
     assert result.preload_skill_refs["subscription-skill"]["skill_id"] == 22
+
+
+def test_format_skill_ref_map_for_log_returns_compact_entries():
+    formatted = format_skill_ref_map_for_log(
+        {
+            "ghost-skill": {
+                "skill_id": 11,
+                "namespace": "team-a",
+                "is_public": False,
+            },
+            "subscription-skill": {
+                "namespace": "team-a",
+                "is_public": False,
+            },
+        }
+    )
+
+    assert formatted == [
+        "ghost-skill@team-a#11",
+        "subscription-skill@team-a#?",
+    ]
