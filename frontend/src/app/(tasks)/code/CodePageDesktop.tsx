@@ -30,6 +30,7 @@ import { Workbench } from '@/features/tasks/components'
 import { ChatArea } from '@/features/tasks/components/chat'
 import { RemoteWorkspaceEntry } from '@/features/tasks/components/remote-workspace'
 import { paths } from '@/config/paths'
+import { usePageExecutionTarget } from '@/features/tasks/hooks/usePageExecutionTarget'
 
 /**
  * Desktop-specific implementation of Code Page
@@ -62,6 +63,12 @@ export function CodePageDesktop() {
 
   // Chat stream context for clearAllStreams
   const { clearAllStreams } = useChatStreamContext()
+
+  const { selectedDeviceId, setSelectedDeviceId, taskType, hideSelectors } = usePageExecutionTarget(
+    {
+      pageType: 'code',
+    }
+  )
 
   // Get current task title for top navigation
   const currentTaskTitle = selectedTaskDetail?.title
@@ -266,8 +273,12 @@ export function CodePageDesktop() {
               teams={teams}
               isTeamsLoading={isTeamsLoading}
               selectedTeamForNewTask={_selectedTeamForNewTask}
-              taskType="code"
+              selectedDeviceId={selectedDeviceId}
+              onSelectedDeviceIdChange={setSelectedDeviceId}
+              showRepositorySelector={taskType === 'code'}
+              taskType={taskType}
               onShareButtonRender={handleShareButtonRender}
+              hideSelectors={hideSelectors}
             />
           </div>
 

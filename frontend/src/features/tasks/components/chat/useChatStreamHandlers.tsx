@@ -7,7 +7,6 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useTaskContext } from '../../contexts/taskContext'
 import { useChatStreamContext } from '../../contexts/chatStreamContext'
 import { useSocket } from '@/contexts/SocketContext'
-import { useDevices } from '@/contexts/DeviceContext'
 import { useToast } from '@/hooks/use-toast'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useUser } from '@/features/common/UserContext'
@@ -92,6 +91,9 @@ export interface UseChatStreamHandlersOptions {
   // Generation mode props (used when taskType === 'video' or 'image')
   /** Generation-specific parameters (resolution, ratio, etc.) */
   generateParams?: GenerateParams
+
+  /** Page-scoped device selection for device mode */
+  selectedDeviceId?: string | null
 }
 
 /**
@@ -193,6 +195,7 @@ export function useChatStreamHandlers({
   selectedDocumentIds,
   additionalSkills,
   generateParams,
+  selectedDeviceId,
 }: UseChatStreamHandlersOptions): ChatStreamHandlers {
   const { toast } = useToast()
   const { t } = useTranslation()
@@ -213,19 +216,12 @@ export function useChatStreamHandlers({
 
   const { retryMessage } = useSocket()
 
-  // Get selected device ID for executor-based tasks
-  const { selectedDeviceId } = useDevices()
-
-  // Determine if we're in device mode - devices page or chat page with device selected
-  // This prevents coding tasks from accidentally inheriting a device_id
-  const isDevicesPage = pathname?.startsWith('/devices')
-  const isDeviceMode = isDevicesPage || taskType === 'task'
-
-  // Determine effective device_id to send:
-  // - Send device_id when in device mode (devices page or chat page with device selected) AND team is not Chat Shell
-  // - This ensures coding tasks don't get routed to devices
+  // Determine effective device_id to send from the current page session.
+  // Existing tasks fall back to their persisted device_id during initial hydration.
   const effectiveDeviceId =
-    isDeviceMode && !isChatShell(selectedTeam) ? selectedDeviceId || undefined : undefined
+    taskType === 'task' && !isChatShell(selectedTeam)
+      ? selectedDeviceId || selectedTaskDetail?.device_id || undefined
+      : undefined
 
   // Local state
   const [pendingTaskId, setPendingTaskId] = useState<number | null>(null)

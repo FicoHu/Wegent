@@ -49,6 +49,8 @@ interface ChatAreaProps {
   teams: Team[]
   isTeamsLoading: boolean
   selectedTeamForNewTask?: Team | null
+  selectedDeviceId?: string | null
+  onSelectedDeviceIdChange?: (deviceId: string | null) => void
   showRepositorySelector?: boolean
   taskType?: TaskType
   onShareButtonRender?: (button: React.ReactNode) => void
@@ -88,6 +90,8 @@ function ChatAreaContent({
   teams,
   isTeamsLoading,
   selectedTeamForNewTask,
+  selectedDeviceId = null,
+  onSelectedDeviceIdChange,
   showRepositorySelector = true,
   taskType = 'chat',
   onShareButtonRender,
@@ -496,6 +500,7 @@ function ChatAreaContent({
     additionalSkills: skillSelector.selectedSkills,
     // Generation parameters for video/image generation tasks
     generateParams,
+    selectedDeviceId,
   })
 
   // Scheme URL action bridge - handles wegent://action/send-message and wegent://action/prefill-message
@@ -936,6 +941,8 @@ function ChatAreaContent({
 
   // Common input card props
   const inputCardProps = {
+    selectedDeviceId,
+    onSelectedDeviceIdChange: onSelectedDeviceIdChange ?? (() => {}),
     taskInputMessage: chatState.taskInputMessage,
     setTaskInputMessage: chatState.setTaskInputMessage,
     selectedTeam: chatState.selectedTeam,

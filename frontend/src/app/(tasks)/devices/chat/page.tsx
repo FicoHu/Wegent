@@ -5,7 +5,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import TopNavigation from '@/features/layout/TopNavigation'
 import {
   TaskSidebar,
@@ -26,9 +26,9 @@ import { useDevices } from '@/contexts/DeviceContext'
 import { useTeamContext } from '@/contexts/TeamContext'
 import { Monitor, WifiOff } from 'lucide-react'
 import { ChatArea } from '@/features/tasks/components/chat'
-import { TaskParamSync, DeviceTaskSync, DeviceParamSync } from '@/features/tasks/components/params'
 import { isOpenClawDevice } from '@/features/devices/utils/device-status'
-import { getPreferredExecutionDevice } from '@/features/devices/utils/execution-target'
+import { TaskParamSync } from '@/features/tasks/components/params'
+import { usePageExecutionTarget } from '@/features/tasks/hooks/usePageExecutionTarget'
 
 export default function DeviceChatPage() {
   const { t } = useTranslation('devices')
@@ -42,11 +42,11 @@ export default function DeviceChatPage() {
   const { teams, isTeamsLoading, refreshTeams } = useTeamContext()
 
   // Device state
-  const { devices, selectedDeviceId, setSelectedDeviceId } = useDevices()
-
-  // Check if deviceId is specified in URL
-  const searchParams = useSearchParams()
-  const hasDeviceIdParam = !!(searchParams.get('deviceId') || searchParams.get('device_id'))
+  const { devices } = useDevices()
+  const { selectedDeviceId, setSelectedDeviceId, disabledReason, hideSelectors } =
+    usePageExecutionTarget({
+      pageType: 'devices',
+    })
 
   // Mobile sidebar state
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
@@ -65,17 +65,6 @@ export default function DeviceChatPage() {
   useEffect(() => {
     saveLastTab('devices')
   }, [])
-
-  // Auto-select preferred device if none selected and no URL param
-  useEffect(() => {
-    if (hasDeviceIdParam) return
-    if (!selectedDeviceId && devices.length > 0) {
-      const preferredDevice = getPreferredExecutionDevice(devices)
-      if (preferredDevice) {
-        setSelectedDeviceId(preferredDevice.device_id)
-      }
-    }
-  }, [devices, selectedDeviceId, setSelectedDeviceId, hasDeviceIdParam])
 
   const handleToggleCollapsed = () => {
     setIsCollapsed(prev => {
@@ -130,8 +119,6 @@ export default function DeviceChatPage() {
     <div className="flex smart-h-screen bg-base text-text-primary box-border">
       {/* URL parameter sync */}
       <TaskParamSync />
-      <DeviceTaskSync />
-      <DeviceParamSync />
 
       {/* Collapsed sidebar floating buttons */}
       {isCollapsed && !isMobile && (
@@ -195,15 +182,13 @@ export default function DeviceChatPage() {
           <ChatArea
             teams={teams}
             isTeamsLoading={isTeamsLoading}
+            selectedDeviceId={selectedDeviceId}
+            onSelectedDeviceIdChange={setSelectedDeviceId}
             showRepositorySelector={false}
             taskType="task"
             onRefreshTeams={handleRefreshTeams}
-            disabledReason={
-              !selectedDevice || selectedDevice.status === 'offline'
-                ? t('device_offline_cannot_send')
-                : undefined
-            }
-            hideSelectors={isOpenClaw}
+            disabledReason={disabledReason}
+            hideSelectors={hideSelectors || isOpenClaw}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-base">

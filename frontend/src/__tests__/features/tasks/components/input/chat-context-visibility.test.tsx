@@ -83,7 +83,10 @@ jest.mock('@/features/tasks/components/selector', () => ({
   isGenerateMode: () => false,
 }))
 
-function createProps(taskType: ChatInputControlsProps['taskType']): ChatInputControlsProps {
+function createProps(
+  taskType: ChatInputControlsProps['taskType'],
+  overrides: Partial<ChatInputControlsProps> = {}
+): ChatInputControlsProps {
   return {
     taskType,
     selectedTeam: null,
@@ -124,6 +127,7 @@ function createProps(taskType: ChatInputControlsProps['taskType']): ChatInputCon
     isSubtaskStreaming: false,
     onStopStream: jest.fn(),
     onSendMessage: jest.fn(),
+    ...overrides,
   }
 }
 
@@ -132,11 +136,13 @@ describe('ChatInputControls chat context visibility', () => {
     render(<ChatInputControls {...createProps('task')} />)
 
     expect(screen.getByTestId('chat-context-input')).toBeInTheDocument()
+    expect(screen.queryByTestId('repo-selector')).not.toBeInTheDocument()
   })
 
   it('keeps knowledge base context input hidden for code mode', () => {
-    render(<ChatInputControls {...createProps('code')} />)
+    render(<ChatInputControls {...createProps('code', { showRepositorySelector: true })} />)
 
     expect(screen.queryByTestId('chat-context-input')).not.toBeInTheDocument()
+    expect(screen.getByTestId('repo-selector')).toBeInTheDocument()
   })
 })

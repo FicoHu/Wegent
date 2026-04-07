@@ -41,8 +41,6 @@ jest.mock('@/contexts/DeviceContext', () => ({
         is_default: false,
       },
     ],
-    selectedDeviceId: null,
-    setSelectedDeviceId: mockSetSelectedDeviceId,
     isLoading: false,
   }),
 }))
@@ -77,7 +75,12 @@ describe('DeviceSelectorTab', () => {
   })
 
   it('does not render nested buttons inside device cards and keeps card keyboard-selectable', () => {
-    const { container } = render(<DeviceSelectorTab />)
+    const { container } = render(
+      <DeviceSelectorTab
+        selectedDeviceId={null}
+        onSelectedDeviceIdChange={mockSetSelectedDeviceId}
+      />
+    )
 
     const deviceCard = screen.getByTestId('device-card-device-1')
     const setDefaultButton = screen.getByTestId('set-default-device-device-1')

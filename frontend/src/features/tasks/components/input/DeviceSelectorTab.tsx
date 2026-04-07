@@ -46,6 +46,10 @@ import { paths } from '@/config/paths'
 import type { DeviceInfo } from '@/apis/devices'
 
 interface DeviceSelectorTabProps {
+  /** Selected device ID for the current page session (null = public mode) */
+  selectedDeviceId: string | null
+  /** Update the selected device ID for the current page session */
+  onSelectedDeviceIdChange: (deviceId: string | null) => void
   /** Additional className */
   className?: string
   /** Disabled state */
@@ -235,6 +239,8 @@ function CloudModeCard({
 }
 
 export function DeviceSelectorTab({
+  selectedDeviceId,
+  onSelectedDeviceIdChange,
   className,
   disabled,
   hasMessages = false,
@@ -243,8 +249,7 @@ export function DeviceSelectorTab({
   const { t } = useTranslation('devices')
   const router = useRouter()
   const { user, updatePreferences } = useUser()
-  const { devices, selectedDeviceId, setSelectedDeviceId, isLoading } = useDevices()
-  const autoSelectionInitializedRef = useRef(false)
+  const { devices, isLoading } = useDevices()
   const [isOpen, setIsOpen] = useState(false)
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -296,32 +301,6 @@ export function DeviceSelectorTab({
     [selectableDevices]
   )
 
-  // Get preferred device based on user preference or fallback to first available
-  const preferredDevice = useMemo(() => {
-    // If user has set a default execution target
-    if (defaultExecutionTarget) {
-      if (defaultExecutionTarget === 'cloud') {
-        return null // Cloud mode
-      }
-      // Find the device by ID
-      const device = selectableDevices.find(d => d.device_id === defaultExecutionTarget)
-      if (device && !isDeviceAtCapacity(device.slot_used, device.slot_max)) {
-        return device
-      }
-    }
-    // Fallback: find first available device that is default or online
-    const defaultDevice = selectableDevices.find(
-      d => d.is_default && !isDeviceAtCapacity(d.slot_used, d.slot_max)
-    )
-    if (defaultDevice) return defaultDevice
-
-    return (
-      selectableDevices.find(
-        d => d.status === 'online' && !isDeviceAtCapacity(d.slot_used, d.slot_max)
-      ) || null
-    )
-  }, [selectableDevices, defaultExecutionTarget])
-
   const localDevices = useMemo(() => {
     return selectableDevices.filter(device => device.device_type !== 'cloud')
   }, [selectableDevices])
@@ -344,35 +323,6 @@ export function DeviceSelectorTab({
       : null
   }, [devices, selectedDeviceId, hasMessages, taskDeviceId])
 
-  useEffect(() => {
-    if (hasMessages || isLoading || autoSelectionInitializedRef.current) {
-      return
-    }
-
-    if (selectedDeviceId) {
-      autoSelectionInitializedRef.current = true
-      return
-    }
-
-    autoSelectionInitializedRef.current = true
-    // Use user's default preference
-    // Only auto-select device if user has explicitly set a device as default
-    // Otherwise, default to cloud mode (selectedDeviceId = null)
-    if (defaultExecutionTarget && defaultExecutionTarget !== 'cloud') {
-      setSelectedDeviceId(preferredDevice?.device_id || null)
-    } else {
-      // Default to cloud mode when no preference is set or cloud is explicitly selected
-      setSelectedDeviceId(null)
-    }
-  }, [
-    hasMessages,
-    isLoading,
-    preferredDevice,
-    selectedDeviceId,
-    setSelectedDeviceId,
-    defaultExecutionTarget,
-  ])
-
   const isSelectedDeviceAvailable = useMemo(() => {
     if (!selectedDevice) return true
     return selectedDevice.status !== 'offline'
@@ -380,15 +330,13 @@ export function DeviceSelectorTab({
 
   const handleDeviceSelect = (deviceId: string) => {
     if (disabled || hasMessages || isLoading) return
-    autoSelectionInitializedRef.current = true
-    setSelectedDeviceId(deviceId)
+    onSelectedDeviceIdChange(deviceId)
     setIsOpen(false)
   }
 
   const handleCloudModeSelect = () => {
     if (disabled || hasMessages || isLoading) return
-    autoSelectionInitializedRef.current = true
-    setSelectedDeviceId(null)
+    onSelectedDeviceIdChange(null)
     setIsOpen(false)
   }
 

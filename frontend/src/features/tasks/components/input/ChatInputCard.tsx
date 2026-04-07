@@ -22,6 +22,10 @@ export interface ChatInputCardProps extends Omit<
   ChatInputControlsProps,
   'taskInputMessage' | 'taskType'
 > {
+  // Page-scoped execution target
+  selectedDeviceId: string | null
+  onSelectedDeviceIdChange: (deviceId: string | null) => void
+
   // Input message
   taskInputMessage: string
   setTaskInputMessage: (message: string) => void
@@ -95,6 +99,8 @@ export interface ChatInputCardProps extends Omit<
  * the messages state (floating input) of ChatArea.
  */
 export function ChatInputCard({
+  selectedDeviceId,
+  onSelectedDeviceIdChange,
   taskInputMessage,
   setTaskInputMessage,
   selectedTeam,
@@ -241,6 +247,8 @@ export function ChatInputCard({
         {!shouldHideChatInput && (
           <div className="absolute -top-[29px] left-4 z-10">
             <DeviceSelectorTab
+              selectedDeviceId={selectedDeviceId}
+              onSelectedDeviceIdChange={onSelectedDeviceIdChange}
               disabled={isLoading || isStreaming}
               hasMessages={hasMessages}
               taskDeviceId={selectedTaskDetail?.device_id}

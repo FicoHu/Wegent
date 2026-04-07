@@ -17,6 +17,7 @@ import { saveLastTab } from '@/utils/userPreferences'
 import { useUser } from '@/features/common/UserContext'
 import { useSearchShortcut } from '@/features/tasks/hooks/useSearchShortcut'
 import { ChatArea } from '@/features/tasks/components/chat'
+import { usePageExecutionTarget } from '@/features/tasks/hooks/usePageExecutionTarget'
 
 /**
  * Mobile-specific implementation of Code Page
@@ -42,6 +43,12 @@ export function CodePageMobile() {
   // Task context for workbench data
   const { selectedTaskDetail, setSelectedTask, refreshTasks, refreshSelectedTaskDetail } =
     useTaskContext()
+
+  const { selectedDeviceId, setSelectedDeviceId, taskType, hideSelectors } = usePageExecutionTarget(
+    {
+      pageType: 'code',
+    }
+  )
 
   // Get current task title for top navigation
   const currentTaskTitle = selectedTaskDetail?.title
@@ -142,8 +149,12 @@ export function CodePageMobile() {
             teams={teams}
             isTeamsLoading={isTeamsLoading}
             selectedTeamForNewTask={_selectedTeamForNewTask}
-            taskType="code"
+            selectedDeviceId={selectedDeviceId}
+            onSelectedDeviceIdChange={setSelectedDeviceId}
+            showRepositorySelector={taskType === 'code'}
+            taskType={taskType}
             onShareButtonRender={handleShareButtonRender}
+            hideSelectors={hideSelectors}
           />
         </div>
       </div>

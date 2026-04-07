@@ -16,12 +16,12 @@ import { saveLastTab } from '@/utils/userPreferences'
 import { useUser } from '@/features/common/UserContext'
 import { useTaskContext } from '@/features/tasks/contexts/taskContext'
 import { useChatStreamContext } from '@/features/tasks/contexts/chatStreamContext'
-import { useDevices } from '@/contexts/DeviceContext'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useSearchShortcut } from '@/features/tasks/hooks/useSearchShortcut'
 import { ChatArea } from '@/features/tasks/components/chat'
 import { CreateGroupChatDialog } from '@/features/tasks/components/group-chat'
+import { usePageExecutionTarget } from '@/features/tasks/hooks/usePageExecutionTarget'
 
 /**
  * Mobile-specific implementation of Chat Page
@@ -44,20 +44,10 @@ export function ChatPageMobile() {
   const { refreshTasks, selectedTaskDetail, setSelectedTask, refreshSelectedTaskDetail } =
     useTaskContext()
 
-  // Device context - when a device is selected, switch to 'task' mode
-  const { selectedDeviceId, devices } = useDevices()
-  const selectedDevice = devices.find(d => d.device_id === selectedDeviceId)
-
-  // Determine taskType based on device selection
-  // When a device is selected, use 'task' mode (same as /devices/chat)
-  // Otherwise, use 'chat' mode
-  const taskType = selectedDeviceId ? 'task' : 'chat'
-
-  // Compute disabled reason for device mode
-  const disabledReason =
-    selectedDeviceId && (!selectedDevice || selectedDevice.status === 'offline')
-      ? t('devices:device_offline_cannot_send')
-      : undefined
+  const { selectedDeviceId, setSelectedDeviceId, taskType, disabledReason, hideSelectors } =
+    usePageExecutionTarget({
+      pageType: 'chat',
+    })
 
   // Get current task title for top navigation
   const currentTaskTitle = selectedTaskDetail?.title
@@ -180,11 +170,14 @@ export function ChatPageMobile() {
           teams={teams}
           isTeamsLoading={isTeamsLoading}
           selectedTeamForNewTask={_selectedTeamForNewTask}
+          selectedDeviceId={selectedDeviceId}
+          onSelectedDeviceIdChange={setSelectedDeviceId}
           showRepositorySelector={false}
           taskType={taskType}
           onShareButtonRender={handleShareButtonRender}
           onRefreshTeams={handleRefreshTeams}
           disabledReason={disabledReason}
+          hideSelectors={hideSelectors}
         />
       </div>
       {/* Create Group Chat Dialog */}

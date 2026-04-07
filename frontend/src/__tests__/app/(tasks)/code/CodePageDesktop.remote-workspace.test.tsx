@@ -3,14 +3,36 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import '@testing-library/jest-dom'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 import { CodePageDesktop } from '@/app/(tasks)/code/CodePageDesktop'
 
+type MockChatAreaProps = Record<string, unknown>
+
+let mockChatAreaProps: MockChatAreaProps | null = null
+let mockSelectedDeviceId: string | null = null
+let mockDevices = [
+  {
+    id: 1,
+    device_id: 'device-1',
+    name: 'macOS-OpenClaw',
+    status: 'online',
+    slot_used: 0,
+    slot_max: 4,
+    bind_shell: 'openclaw',
+  },
+]
+let mockSearchTaskId: string | null = '84'
+let mockSelectedTaskDetail: Record<string, unknown> | null = {
+  id: 84,
+  title: 'Task 84',
+  status: 'RUNNING',
+}
+
 jest.mock('next/navigation', () => ({
   useSearchParams: () => ({
-    get: (key: string) => (key === 'taskId' ? '84' : null),
+    get: (key: string) => (key === 'taskId' ? mockSearchTaskId : null),
   }),
 }))
 
@@ -68,10 +90,17 @@ jest.mock('@/contexts/TeamContext', () => ({
 
 jest.mock('@/features/tasks/contexts/taskContext', () => ({
   useTaskContext: () => ({
-    selectedTaskDetail: { id: 84, title: 'Task 84', status: 'RUNNING' },
+    selectedTaskDetail: mockSelectedTaskDetail,
     setSelectedTask: jest.fn(),
     refreshTasks: jest.fn(),
     refreshSelectedTaskDetail: jest.fn(),
+  }),
+}))
+
+jest.mock('@/contexts/DeviceContext', () => ({
+  useDevices: () => ({
+    selectedDeviceId: mockSelectedDeviceId,
+    devices: mockDevices,
   }),
 }))
 
@@ -102,7 +131,10 @@ jest.mock('@/features/tasks/components', () => ({
 }))
 
 jest.mock('@/features/tasks/components/chat', () => ({
-  ChatArea: () => <div>chat-area</div>,
+  ChatArea: (props: MockChatAreaProps) => {
+    mockChatAreaProps = props
+    return <div>chat-area</div>
+  },
 }))
 
 jest.mock('@/hooks/useTranslation', () => ({
@@ -118,9 +150,60 @@ jest.mock('@/features/tasks/components/remote-workspace', () => ({
 }))
 
 describe('CodePageDesktop remote workspace integration', () => {
+  beforeEach(() => {
+    mockChatAreaProps = null
+    mockSelectedDeviceId = null
+    mockSearchTaskId = '84'
+    mockDevices = [
+      {
+        id: 1,
+        device_id: 'device-1',
+        name: 'macOS-OpenClaw',
+        status: 'online',
+        slot_used: 0,
+        slot_max: 4,
+        bind_shell: 'openclaw',
+      },
+    ]
+    mockSelectedTaskDetail = { id: 84, title: 'Task 84', status: 'RUNNING' }
+  })
+
   test('code desktop renders remote workspace entry in top nav when task selected', () => {
     render(<CodePageDesktop />)
 
     expect(screen.getByTestId('remote-workspace-entry')).toHaveTextContent('84')
+  })
+
+  test('code desktop defaults to public mode even when device context has a stale selection', () => {
+    mockSelectedDeviceId = 'device-1'
+    mockSearchTaskId = null
+    mockSelectedTaskDetail = null
+
+    render(<CodePageDesktop />)
+
+    expect(mockChatAreaProps).toMatchObject({
+      taskType: 'code',
+      showRepositorySelector: true,
+      hideSelectors: false,
+    })
+  })
+
+  test('code desktop matches device-page behavior for existing OpenClaw tasks', async () => {
+    mockSelectedTaskDetail = {
+      id: 84,
+      title: 'Task 84',
+      status: 'RUNNING',
+      device_id: 'device-1',
+    }
+
+    render(<CodePageDesktop />)
+
+    await waitFor(() => {
+      expect(mockChatAreaProps).toMatchObject({
+        taskType: 'task',
+        showRepositorySelector: false,
+        hideSelectors: true,
+      })
+    })
   })
 })
