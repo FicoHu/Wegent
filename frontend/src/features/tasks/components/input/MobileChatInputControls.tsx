@@ -164,6 +164,7 @@ export function MobileChatInputControls({
 }: MobileChatInputControlsProps) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const showChatContexts = canUseChatContexts(taskType, selectedTeam)
+  const shouldShowRepositorySelector = showRepositorySelector && taskType === 'code'
 
   // Render send button based on state
   const renderSendButton = () => {
@@ -302,7 +303,7 @@ export function MobileChatInputControls({
             )}
 
             {/* Repository Selector - full row clickable, only show if team requires workspace */}
-            {showRepositorySelector &&
+            {shouldShowRepositorySelector &&
               teamRequiresWorkspace(selectedTeam) &&
               effectiveRequiresWorkspace !== false && (
                 <>
@@ -318,7 +319,7 @@ export function MobileChatInputControls({
               )}
 
             {/* Branch Selector - full row clickable, only show if team requires workspace */}
-            {showRepositorySelector &&
+            {shouldShowRepositorySelector &&
               teamRequiresWorkspace(selectedTeam) &&
               effectiveRequiresWorkspace !== false &&
               selectedRepo && (

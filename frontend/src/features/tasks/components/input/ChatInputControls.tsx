@@ -257,6 +257,7 @@ export function ChatInputControls({
   const shouldUseCompactQuota = true
   const isMobile = useIsMobile()
   const showChatContexts = canUseChatContexts(taskType, selectedTeam)
+  const shouldShowRepositorySelector = showRepositorySelector && taskType === 'code'
 
   // Determine the send button state
   const renderSendButton = () => {
@@ -340,7 +341,7 @@ export function ChatInputControls({
         taskId={taskId}
         taskModelId={taskModelId}
         knowledgeBaseId={knowledgeBaseId}
-        showRepositorySelector={showRepositorySelector}
+        showRepositorySelector={shouldShowRepositorySelector}
         selectedRepo={selectedRepo}
         setSelectedRepo={setSelectedRepo}
         selectedBranch={selectedBranch}
@@ -552,7 +553,7 @@ export function ChatInputControls({
 
             {/* Repository and Branch Unified Selector - show when repository selector is enabled */}
             {/* Always show when showRepositorySelector is true, let component handle the display */}
-            {showRepositorySelector && (
+            {shouldShowRepositorySelector && (
               <UnifiedRepositorySelector
                 selectedRepo={selectedRepo}
                 selectedBranch={selectedBranch}

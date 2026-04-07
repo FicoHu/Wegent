@@ -139,6 +139,12 @@ describe('ChatInputControls chat context visibility', () => {
     expect(screen.queryByTestId('repo-selector')).not.toBeInTheDocument()
   })
 
+  it('hides repository selector for device task mode even if the page passes it through', () => {
+    render(<ChatInputControls {...createProps('task', { showRepositorySelector: true })} />)
+
+    expect(screen.queryByTestId('repo-selector')).not.toBeInTheDocument()
+  })
+
   it('keeps knowledge base context input hidden for code mode', () => {
     render(<ChatInputControls {...createProps('code', { showRepositorySelector: true })} />)
 

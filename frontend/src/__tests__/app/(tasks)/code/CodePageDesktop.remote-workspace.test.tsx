@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import '@testing-library/jest-dom'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 import { CodePageDesktop } from '@/app/(tasks)/code/CodePageDesktop'
@@ -203,6 +203,44 @@ describe('CodePageDesktop remote workspace integration', () => {
         taskType: 'task',
         showRepositorySelector: false,
         hideSelectors: true,
+      })
+    })
+  })
+
+  test('code desktop hides repository selector after selecting a device in-page', async () => {
+    mockSearchTaskId = null
+    mockSelectedTaskDetail = null
+    mockDevices = [
+      {
+        id: 1,
+        device_id: 'device-1',
+        name: 'macOS-Device',
+        status: 'online',
+        slot_used: 0,
+        slot_max: 4,
+        bind_shell: 'claudecode',
+      },
+    ]
+
+    render(<CodePageDesktop />)
+
+    expect(mockChatAreaProps).toMatchObject({
+      taskType: 'code',
+      showRepositorySelector: true,
+      hideSelectors: false,
+    })
+
+    await act(async () => {
+      ;(mockChatAreaProps?.onSelectedDeviceIdChange as (deviceId: string | null) => void)?.(
+        'device-1'
+      )
+    })
+
+    await waitFor(() => {
+      expect(mockChatAreaProps).toMatchObject({
+        taskType: 'task',
+        showRepositorySelector: false,
+        hideSelectors: false,
       })
     })
   })
