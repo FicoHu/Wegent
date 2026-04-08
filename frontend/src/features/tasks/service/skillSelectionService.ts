@@ -55,19 +55,3 @@ export function isSameSkillRef(left: SkillRef, right: SkillRef): boolean {
     left.is_public === right.is_public
   )
 }
-
-export function mergeSkillRefs(...skillGroups: SkillRef[][]): SkillRef[] {
-  const merged: SkillRef[] = []
-
-  for (const skillGroup of skillGroups) {
-    for (const skill of skillGroup) {
-      if (merged.some(existing => isSameSkillRef(existing, skill))) {
-        continue
-      }
-
-      merged.push(skill)
-    }
-  }
-
-  return merged
-}

@@ -112,45 +112,6 @@ function HistoryTaskHarness({ taskDetail }: { taskDetail: TaskDetail }) {
   return <div data-testid="selected-skills">{JSON.stringify(state.selectedSkills)}</div>
 }
 
-function TeamSkillHarness() {
-  const state = useSkillSelector({ team: createTeam() })
-
-  return (
-    <div>
-      <button
-        data-testid="toggle-team-skill"
-        onClick={() =>
-          state.toggleSkill({
-            skill_id: 101,
-            name: 'recday_new',
-            namespace: 'skill-alpha',
-            is_public: false,
-          })
-        }
-      >
-        toggle team skill
-      </button>
-      <button
-        data-testid="select-user-skill"
-        onClick={() =>
-          state.toggleSkill({
-            skill_id: 202,
-            name: 'recday_extra',
-            namespace: 'skill-beta',
-            is_public: false,
-          })
-        }
-      >
-        select user skill
-      </button>
-      <button data-testid="reset-skills" onClick={() => state.resetSkills()}>
-        reset skills
-      </button>
-      <div data-testid="selected-skills">{JSON.stringify(state.selectedSkills)}</div>
-    </div>
-  )
-}
-
 describe('useSkillSelector', () => {
   beforeEach(() => {
     mockFetchUnifiedSkillsList.mockResolvedValue([
@@ -224,68 +185,6 @@ describe('useSkillSelector', () => {
     await waitFor(() => {
       expect(screen.getByTestId('selected-skills')).toHaveTextContent('"skill_id":202')
       expect(screen.getByTestId('selected-skills')).toHaveTextContent('"namespace":"skill-beta"')
-    })
-  })
-
-  it('keeps team skills selected and does not clear them through toggle or reset', async () => {
-    mockFetchUnifiedSkillsList.mockResolvedValue([
-      {
-        id: 101,
-        name: 'recday_new',
-        namespace: 'skill-alpha',
-        description: 'alpha',
-        is_active: true,
-        is_public: false,
-        user_id: 1,
-      },
-      {
-        id: 202,
-        name: 'recday_extra',
-        namespace: 'skill-beta',
-        description: 'beta',
-        is_active: true,
-        is_public: false,
-        user_id: 1,
-      },
-    ])
-    mockFetchTeamSkills.mockResolvedValue({
-      team_id: 1,
-      team_namespace: 'default',
-      skills: [],
-      preload_skills: [],
-      skill_refs: [
-        {
-          skill_id: 101,
-          name: 'recday_new',
-          namespace: 'skill-alpha',
-          is_public: false,
-        },
-      ],
-    })
-
-    render(<TeamSkillHarness />)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('selected-skills')).toHaveTextContent('"skill_id":101')
-    })
-
-    fireEvent.click(screen.getByTestId('toggle-team-skill'))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('selected-skills')).toHaveTextContent('"skill_id":101')
-    })
-
-    fireEvent.click(screen.getByTestId('select-user-skill'))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('selected-skills')).toHaveTextContent('"skill_id":202')
-    })
-
-    fireEvent.click(screen.getByTestId('reset-skills'))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('selected-skills')).toHaveTextContent('"skill_id":101')
-      expect(screen.getByTestId('selected-skills')).not.toHaveTextContent('"skill_id":202')
     })
   })
 })

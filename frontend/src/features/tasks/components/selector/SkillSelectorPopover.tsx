@@ -253,20 +253,18 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
 
         const skillRef = toSkillRef(skill)
         const isSelected = selectedSkills.some(selected => isSameSkillRef(selected, skillRef))
-        const isLocked = teamSkills.some(teamSkill => teamSkill.name === skillRef.name)
-        const isInteractive = !readOnly && !isLocked
 
         elements.push(
           <div
             key={`skill-${elements.length}`}
             className={`flex items-center gap-2 px-2 py-2 rounded-md transition-colors ${
-              isInteractive ? 'cursor-pointer' : 'cursor-default'
-            } ${isSelected ? 'bg-primary/10' : isInteractive ? 'hover:bg-muted' : 'opacity-70'}`}
-            onClick={isInteractive ? () => onToggleSkill(skillRef) : undefined}
-            role={isInteractive ? 'button' : undefined}
-            tabIndex={isInteractive ? 0 : -1}
+              readOnly ? 'cursor-default' : 'cursor-pointer'
+            } ${isSelected ? 'bg-primary/10' : readOnly ? '' : 'hover:bg-muted'}`}
+            onClick={readOnly ? undefined : () => onToggleSkill(skillRef)}
+            role={readOnly ? undefined : 'button'}
+            tabIndex={readOnly ? -1 : 0}
             onKeyDown={
-              !isInteractive
+              readOnly
                 ? undefined
                 : e => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -279,13 +277,13 @@ const SkillSelectorPopover = forwardRef<SkillSelectorPopoverRef, SkillSelectorPo
             <div
               className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
                 isSelected ? 'bg-primary border-primary text-white' : 'border-border bg-background'
-              } ${!isInteractive ? 'opacity-60' : ''}`}
+              } ${readOnly ? 'opacity-60' : ''}`}
             >
               {isSelected && <Check className="h-3 w-3" />}
             </div>
             <div className="flex-1 min-w-0">
               <div
-                className={`text-sm truncate ${!isInteractive ? 'text-text-muted' : 'text-text-primary'}`}
+                className={`text-sm truncate ${readOnly ? 'text-text-muted' : 'text-text-primary'}`}
               >
                 {skill.displayName || skill.name}
               </div>
