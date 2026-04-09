@@ -84,6 +84,33 @@ export interface BranchDiffResponse {
   permalink_url: string
 }
 
+export interface PublishAppPayload {
+  app_name?: string
+  public_url?: string
+  entry_path?: string
+}
+
+export interface PublishedAppInfo {
+  published: boolean
+  app_name?: string
+  public_url?: string
+  entry_path?: string
+  publisher_user_id?: number
+  source_task_id?: number
+  workspace_id?: number
+  workspace_name?: string
+  workspace_namespace?: string
+  published_at?: string
+  executor_name?: string
+  executor_namespace?: string
+}
+
+export interface PublishAppResponse {
+  published: boolean
+  app?: PublishedAppInfo | null
+  message?: string
+}
+
 // Task Share Types
 export interface TaskShareResponse {
   share_url: string
@@ -596,6 +623,27 @@ export const taskApis = {
     taskId: number
   ): Promise<{ task_id: number; preserve_executor: boolean; message: string }> => {
     return apiClient.delete(`/tasks/${taskId}/preserve-executor`)
+  },
+
+  /**
+   * Get published app info for a task workspace
+   */
+  getPublishedApp: async (taskId: number): Promise<PublishAppResponse> => {
+    return apiClient.get(`/tasks/${taskId}/publish`)
+  },
+
+  /**
+   * Publish app for a task workspace
+   */
+  publishApp: async (taskId: number, payload: PublishAppPayload): Promise<PublishAppResponse> => {
+    return apiClient.post(`/tasks/${taskId}/publish`, payload)
+  },
+
+  /**
+   * Unpublish app for a task workspace
+   */
+  unpublishApp: async (taskId: number): Promise<PublishAppResponse> => {
+    return apiClient.delete(`/tasks/${taskId}/publish`)
   },
 }
 

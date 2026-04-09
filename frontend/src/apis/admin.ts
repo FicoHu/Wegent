@@ -165,6 +165,26 @@ export interface AdminPersonalKeyListResponse {
   items: AdminPersonalKey[]
   total: number
 }
+
+export interface AdminPublishedApp {
+  user_id: number
+  task_id?: number | null
+  workspace_id?: number | null
+  workspace_name?: string | null
+  workspace_namespace?: string | null
+  app_name?: string | null
+  public_url?: string | null
+  entry_path?: string | null
+  published_at?: string | null
+  executor_name?: string | null
+  executor_namespace?: string | null
+}
+
+export interface AdminPublishedAppListResponse {
+  total: number
+  items: AdminPublishedApp[]
+}
+
 // Background Execution Monitor Types
 export interface BackgroundExecutionMonitorStats {
   total_executions: number
@@ -1031,5 +1051,22 @@ export const adminApis = {
       user_id: userId,
       target_host: targetHost,
     })
+  },
+
+  /**
+   * Get published apps list (admin only)
+   */
+  async getPublishedApps(
+    page: number = 1,
+    limit: number = 20,
+    search?: string
+  ): Promise<AdminPublishedAppListResponse> {
+    const params = new URLSearchParams()
+    params.append('page', String(page))
+    params.append('limit', String(limit))
+    if (search) {
+      params.append('search', search)
+    }
+    return apiClient.get(`/admin/published-apps?${params.toString()}`)
   },
 }

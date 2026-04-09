@@ -29,6 +29,7 @@ import {
   Activity,
   MessageSquare,
   Monitor,
+  AppWindow,
 } from 'lucide-react'
 
 export type AdminTabId =
@@ -45,6 +46,7 @@ export type AdminTabId =
   | 'im-channels'
   | 'monitor'
   | 'device-monitor'
+  | 'published-apps'
 
 interface AdminTabNavProps {
   activeTab: AdminTabId
@@ -58,11 +60,21 @@ interface TabItem {
 }
 
 export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const isMobile = useIsMobile()
   const indicatorContainerRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [indicatorStyle, setIndicatorStyle] = useState({ width: 0, left: 0 })
+
+  const resolvePublishedTabLabel = () => {
+    const translated = t('admin:tabs.published_apps', {
+      defaultValue: t('common:tabs.published_apps'),
+    })
+    if (translated === 'tabs.published_apps' || translated === 'published_apps') {
+      return i18n.language?.startsWith('zh') ? '已发布应用' : 'Published Apps'
+    }
+    return translated
+  }
 
   // Tab items
   const tabs: TabItem[] = [
@@ -79,6 +91,11 @@ export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
     { id: 'im-channels', label: t('admin:tabs.im_channels'), icon: MessageSquare },
     { id: 'monitor', label: t('admin:tabs.monitor'), icon: Activity },
     { id: 'device-monitor', label: t('admin:tabs.device_monitor'), icon: Monitor },
+    {
+      id: 'published-apps',
+      label: resolvePublishedTabLabel(),
+      icon: AppWindow,
+    },
   ]
 
   // Update the indicator position when the active tab changes

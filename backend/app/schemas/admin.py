@@ -323,6 +323,29 @@ FlowMonitorError = SubscriptionMonitorError
 FlowMonitorErrorListResponse = SubscriptionMonitorErrorListResponse
 
 
+class AdminPublishedAppItem(BaseModel):
+    """Published application item for admin listing."""
+
+    user_id: int
+    task_id: Optional[int] = None
+    workspace_id: Optional[int] = None
+    workspace_name: Optional[str] = None
+    workspace_namespace: Optional[str] = None
+    app_name: Optional[str] = None
+    public_url: Optional[str] = None
+    entry_path: Optional[str] = None
+    published_at: Optional[str] = None
+    executor_name: Optional[str] = None
+    executor_namespace: Optional[str] = None
+
+
+class AdminPublishedAppListResponse(BaseModel):
+    """Admin published app list response."""
+
+    total: int
+    items: List[AdminPublishedAppItem]
+
+
 # Public Team Management Schemas
 class PublicTeamCreate(BaseModel):
     """Public team creation model"""

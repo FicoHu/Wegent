@@ -14,7 +14,28 @@
     "system_config": "系统配置",
     "im_channels": "IM 渠道",
     "monitor": "订阅监控",
-    "device_monitor": "设备监控"
+    "device_monitor": "设备监控",
+    "published_apps": "已发布应用"
+  },
+  "published_apps": {
+    "title": "已发布应用",
+    "search_placeholder": "搜索应用/地址/工作区",
+    "search": "搜索",
+    "loading": "正在加载已发布应用...",
+    "empty": "暂无已发布应用",
+    "columns": {
+      "user_id": "用户 ID",
+      "app_name": "应用名称",
+      "task_id": "任务 ID",
+      "workspace": "工作区",
+      "public_url": "访问地址",
+      "published_at": "发布时间"
+    },
+    "pagination": {
+      "total": "总数：{{total}}",
+      "prev": "上一页",
+      "next": "下一页"
+    }
   },
   "stats": {
     "total_users": "总用户数",
