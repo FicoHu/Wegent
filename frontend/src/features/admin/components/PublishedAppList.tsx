@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
 export default function PublishedAppList() {
-  const { t } = useTranslation('admin')
+  const { t } = useTranslation()
   const [items, setItems] = useState<AdminPublishedApp[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -42,12 +42,14 @@ export default function PublishedAppList() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-text-primary">{t('published_apps.title')}</h2>
+        <h2 className="text-lg font-semibold text-text-primary">
+          {t('admin:published_apps.title')}
+        </h2>
         <div className="flex items-center gap-2">
           <Input
             value={search}
             onChange={event => setSearch(event.target.value)}
-            placeholder={t('published_apps.search_placeholder')}
+            placeholder={t('admin:published_apps.search_placeholder')}
             className="w-64"
             data-testid="published-apps-search-input"
           />
@@ -59,7 +61,7 @@ export default function PublishedAppList() {
             }}
             data-testid="published-apps-search-button"
           >
-            {t('published_apps.search')}
+            {t('admin:published_apps.search')}
           </Button>
         </div>
       </div>
@@ -68,25 +70,25 @@ export default function PublishedAppList() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-text-secondary">
-              <th className="px-4 py-3">{t('published_apps.columns.user_id')}</th>
-              <th className="px-4 py-3">{t('published_apps.columns.app_name')}</th>
-              <th className="px-4 py-3">{t('published_apps.columns.task_id')}</th>
-              <th className="px-4 py-3">{t('published_apps.columns.workspace')}</th>
-              <th className="px-4 py-3">{t('published_apps.columns.public_url')}</th>
-              <th className="px-4 py-3">{t('published_apps.columns.published_at')}</th>
+              <th className="px-4 py-3">{t('admin:published_apps.columns.user_id')}</th>
+              <th className="px-4 py-3">{t('admin:published_apps.columns.app_name')}</th>
+              <th className="px-4 py-3">{t('admin:published_apps.columns.task_id')}</th>
+              <th className="px-4 py-3">{t('admin:published_apps.columns.workspace')}</th>
+              <th className="px-4 py-3">{t('admin:published_apps.columns.public_url')}</th>
+              <th className="px-4 py-3">{t('admin:published_apps.columns.published_at')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
                 <td className="px-4 py-6 text-text-secondary" colSpan={6}>
-                  {t('published_apps.loading')}
+                  {t('admin:published_apps.loading')}
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
                 <td className="px-4 py-6 text-text-secondary" colSpan={6}>
-                  {t('published_apps.empty')}
+                  {t('admin:published_apps.empty')}
                 </td>
               </tr>
             ) : (
@@ -122,7 +124,7 @@ export default function PublishedAppList() {
       </div>
 
       <div className="flex items-center justify-between text-sm text-text-secondary">
-        <span>{t('published_apps.pagination.total', { total })}</span>
+        <span>{t('admin:published_apps.pagination.total', { total })}</span>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -131,7 +133,7 @@ export default function PublishedAppList() {
             disabled={page <= 1}
             data-testid="published-apps-prev-button"
           >
-            {t('published_apps.pagination.prev')}
+            {t('admin:published_apps.pagination.prev')}
           </Button>
           <span>
             {page}/{totalPages}
@@ -143,7 +145,7 @@ export default function PublishedAppList() {
             disabled={page >= totalPages}
             data-testid="published-apps-next-button"
           >
-            {t('published_apps.pagination.next')}
+            {t('admin:published_apps.pagination.next')}
           </Button>
         </div>
       </div>
