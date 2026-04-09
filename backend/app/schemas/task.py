@@ -33,6 +33,39 @@ class TaskApp(BaseModel):
     previewUrl: str
 
 
+class PublishAppRequest(BaseModel):
+    """Request model for publishing a task application."""
+
+    app_name: Optional[str] = None
+    public_url: Optional[str] = None
+    entry_path: Optional[str] = None
+
+
+class PublishedAppInfo(BaseModel):
+    """Published app metadata stored in workspace status.publish."""
+
+    published: bool = False
+    app_name: Optional[str] = None
+    public_url: Optional[str] = None
+    entry_path: Optional[str] = None
+    publisher_user_id: Optional[int] = None
+    source_task_id: Optional[int] = None
+    workspace_id: Optional[int] = None
+    workspace_name: Optional[str] = None
+    workspace_namespace: Optional[str] = None
+    published_at: Optional[datetime] = None
+    executor_name: Optional[str] = None
+    executor_namespace: Optional[str] = None
+
+
+class PublishAppResponse(BaseModel):
+    """Response model for task publish operations."""
+
+    published: bool
+    app: Optional[PublishedAppInfo] = None
+    message: Optional[str] = None
+
+
 class TaskStatus(str, Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"

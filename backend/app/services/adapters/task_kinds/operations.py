@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, Optional
 
 import httpx
+import redis
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -36,6 +37,10 @@ from .converters import convert_to_task_dict
 from .helpers import create_subtasks
 
 logger = logging.getLogger(__name__)
+
+PUBLISH_REDIS_KEY_PREFIX = "publish:user"
+PUBLISH_EMPTY_KEY_PREFIX = "publish:user:none"
+PUBLISH_EMPTY_TTL_SECONDS = 60
 
 
 class TaskOperationsMixin:
@@ -1224,5 +1229,288 @@ class TaskOperationsMixin:
                 "Executor will be preserved for this task"
                 if preserve
                 else "Executor cleanup enabled for this task"
+            ),
+        }
+
+    def _get_publish_redis_client(self) -> redis.Redis:
+        """Create Redis client for publish constraints."""
+        redis_url = (
+            settings.REDIS_URL
+            or f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/0"
+        )
+        return redis.from_url(redis_url, decode_responses=True)
+
+    def _publish_user_key(self, user_id: int) -> str:
+        return f"{PUBLISH_REDIS_KEY_PREFIX}:{user_id}"
+
+    def _publish_user_none_key(self, user_id: int) -> str:
+        return f"{PUBLISH_EMPTY_KEY_PREFIX}:{user_id}"
+
+    def _extract_publish_info(
+        self, workspace_json: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Extract publish metadata from workspace json."""
+        status_data = (workspace_json or {}).get("status", {}) or {}
+        publish_data = status_data.get("publish", {}) or {}
+        if not publish_data.get("published"):
+            return None
+        return publish_data
+
+    def _ensure_workspace_publish_constraint(
+        self, db: Session, user_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """Lazy recover Redis publish constraint for a single user."""
+        redis_client = self._get_publish_redis_client()
+        user_key = self._publish_user_key(user_id)
+        none_key = self._publish_user_none_key(user_id)
+
+        cached = redis_client.get(user_key)
+        if cached:
+            try:
+                return json_lib.loads(cached)
+            except Exception:
+                redis_client.delete(user_key)
+
+        if redis_client.exists(none_key):
+            return None
+
+        workspaces = (
+            db.query(TaskResource)
+            .filter(
+                TaskResource.user_id == user_id,
+                TaskResource.kind == "Workspace",
+                TaskResource.is_active == TaskResource.STATE_ACTIVE,
+            )
+            .order_by(TaskResource.updated_at.desc())
+            .all()
+        )
+
+        for workspace in workspaces:
+            publish_data = self._extract_publish_info(workspace.json)
+            if not publish_data:
+                continue
+            payload = {
+                "user_id": user_id,
+                "task_id": publish_data.get("source_task_id"),
+                "workspace_id": workspace.id,
+                "workspace_name": workspace.name,
+                "workspace_namespace": workspace.namespace,
+                "app_name": publish_data.get("app_name"),
+                "public_url": publish_data.get("public_url"),
+                "entry_path": publish_data.get("entry_path"),
+                "published_at": publish_data.get("published_at"),
+                "executor_name": publish_data.get("executor_name"),
+                "executor_namespace": publish_data.get("executor_namespace"),
+            }
+            redis_client.set(user_key, json_lib.dumps(payload))
+            redis_client.delete(none_key)
+            return payload
+
+        redis_client.setex(none_key, PUBLISH_EMPTY_TTL_SECONDS, "1")
+        return None
+
+    def _get_task_resource_with_permission(
+        self, db: Session, task_id: int, user_id: int
+    ) -> TaskResource:
+        from app.services.task_member_service import task_member_service
+
+        if not task_member_service.is_member(db, task_id, user_id):
+            raise HTTPException(
+                status_code=404, detail="Task not found or no permission"
+            )
+
+        task = (
+            db.query(TaskResource)
+            .filter(
+                TaskResource.id == task_id,
+                TaskResource.kind == "Task",
+                TaskResource.is_active == TaskResource.STATE_ACTIVE,
+            )
+            .first()
+        )
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return task
+
+    def _get_workspace_resource_for_task(
+        self, db: Session, task: TaskResource
+    ) -> tuple[TaskResource, Task]:
+        task_crd = Task.model_validate(task.json)
+        if not task_crd.spec.workspaceRef:
+            raise HTTPException(
+                status_code=400, detail="Task has no workspace configured"
+            )
+
+        workspace_name = task_crd.spec.workspaceRef.name
+        workspace_namespace = task_crd.spec.workspaceRef.namespace
+        workspace = (
+            db.query(TaskResource)
+            .filter(
+                TaskResource.user_id == task.user_id,
+                TaskResource.kind == "Workspace",
+                TaskResource.name == workspace_name,
+                TaskResource.namespace == workspace_namespace,
+                TaskResource.is_active == TaskResource.STATE_ACTIVE,
+            )
+            .first()
+        )
+        if not workspace:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        return workspace, task_crd
+
+    def get_published_app(
+        self, db: Session, *, task_id: int, user_id: int
+    ) -> Dict[str, Any]:
+        """Get publish status for task workspace."""
+        task = self._get_task_resource_with_permission(db, task_id, user_id)
+        workspace, _ = self._get_workspace_resource_for_task(db, task)
+        publish_data = self._extract_publish_info(workspace.json)
+
+        return {
+            "published": bool(publish_data),
+            "app": publish_data,
+            "message": "Published app found" if publish_data else "No published app",
+        }
+
+    def publish_task_app(
+        self,
+        db: Session,
+        *,
+        task_id: int,
+        user_id: int,
+        app_name: Optional[str] = None,
+        public_url: Optional[str] = None,
+        entry_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Publish a task app using workspace metadata + Redis constraint."""
+        task = self._get_task_resource_with_permission(db, task_id, user_id)
+        workspace, task_crd = self._get_workspace_resource_for_task(db, task)
+
+        task_type = (
+            task_crd.metadata.labels
+            and task_crd.metadata.labels.get("taskType")
+            or "chat"
+        )
+        if task_type != "code":
+            raise HTTPException(
+                status_code=400, detail="Only code tasks can be published"
+            )
+
+        self._ensure_workspace_publish_constraint(db, user_id)
+        redis_client = self._get_publish_redis_client()
+        user_key = self._publish_user_key(user_id)
+        cached = redis_client.get(user_key)
+        if cached:
+            cached_data = json_lib.loads(cached)
+            cached_workspace_id = cached_data.get("workspace_id")
+            if cached_workspace_id and int(cached_workspace_id) != workspace.id:
+                raise HTTPException(
+                    status_code=409,
+                    detail="User already has a published app in another workspace",
+                )
+
+        now_iso = datetime.utcnow().isoformat()
+        status_data = (workspace.json or {}).get("status", {}) or {}
+        publish_data = {
+            "published": True,
+            "app_name": app_name or f"task-{task_id}-app",
+            "public_url": public_url
+            or (
+                (
+                    task_crd.status.app.previewUrl
+                    if task_crd.status and task_crd.status.app
+                    else ""
+                )
+            ),
+            "entry_path": entry_path or "/workspace",
+            "publisher_user_id": user_id,
+            "source_task_id": task_id,
+            "workspace_id": workspace.id,
+            "workspace_name": workspace.name,
+            "workspace_namespace": workspace.namespace,
+            "published_at": now_iso,
+            "executor_name": None,
+            "executor_namespace": None,
+        }
+        status_data["publish"] = publish_data
+        workspace_json = workspace.json or {}
+        workspace_json["status"] = status_data
+        workspace.json = workspace_json
+        workspace.updated_at = datetime.now()
+        flag_modified(workspace, "json")
+
+        if task_crd.metadata.labels is None:
+            task_crd.metadata.labels = {}
+        task_crd.metadata.labels["preserveExecutor"] = "true"
+        task.json = task_crd.model_dump(mode="json", exclude_none=True)
+        task.updated_at = datetime.now()
+        flag_modified(task, "json")
+
+        db.commit()
+        db.refresh(workspace)
+        db.refresh(task)
+
+        redis_payload = {
+            "user_id": user_id,
+            "task_id": task_id,
+            "workspace_id": workspace.id,
+            "workspace_name": workspace.name,
+            "workspace_namespace": workspace.namespace,
+            "app_name": publish_data["app_name"],
+            "public_url": publish_data["public_url"],
+            "entry_path": publish_data["entry_path"],
+            "published_at": publish_data["published_at"],
+            "executor_name": publish_data["executor_name"],
+            "executor_namespace": publish_data["executor_namespace"],
+        }
+        redis_client.set(user_key, json_lib.dumps(redis_payload))
+        redis_client.delete(self._publish_user_none_key(user_id))
+
+        return {
+            "published": True,
+            "app": publish_data,
+            "message": "App published successfully",
+        }
+
+    def unpublish_task_app(
+        self, db: Session, *, task_id: int, user_id: int
+    ) -> Dict[str, Any]:
+        """Unpublish app from task workspace metadata and Redis."""
+        task = self._get_task_resource_with_permission(db, task_id, user_id)
+        workspace, task_crd = self._get_workspace_resource_for_task(db, task)
+
+        workspace_json = workspace.json or {}
+        status_data = workspace_json.get("status", {}) or {}
+        publish_data = status_data.get("publish", {}) or {}
+        was_published = bool(publish_data.get("published"))
+
+        status_data["publish"] = {"published": False}
+        workspace_json["status"] = status_data
+        workspace.json = workspace_json
+        workspace.updated_at = datetime.now()
+        flag_modified(workspace, "json")
+
+        if task_crd.metadata.labels is None:
+            task_crd.metadata.labels = {}
+        task_crd.metadata.labels["preserveExecutor"] = "false"
+        task.json = task_crd.model_dump(mode="json", exclude_none=True)
+        task.updated_at = datetime.now()
+        flag_modified(task, "json")
+
+        db.commit()
+        db.refresh(workspace)
+        db.refresh(task)
+
+        redis_client = self._get_publish_redis_client()
+        redis_client.delete(self._publish_user_key(user_id))
+        redis_client.delete(self._publish_user_none_key(user_id))
+
+        return {
+            "published": False,
+            "app": None,
+            "message": (
+                "App unpublished successfully"
+                if was_published
+                else "No published app found to unpublish"
             ),
         }

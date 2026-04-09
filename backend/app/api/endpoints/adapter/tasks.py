@@ -37,6 +37,8 @@ from app.schemas.task import (
     PipelineStageInfo,
     PromptDraftGenerateRequest,
     PromptDraftGenerateResponse,
+    PublishAppRequest,
+    PublishAppResponse,
     TaskCreate,
     TaskDetail,
     TaskInDB,
@@ -839,4 +841,46 @@ def cancel_preserve_executor(
     """
     return task_kinds_service.set_preserve_executor(
         db=db, task_id=task_id, user_id=current_user.id, preserve=False
+    )
+
+
+@router.get("/{task_id}/publish", response_model=PublishAppResponse)
+def get_published_app(
+    task_id: int = Depends(with_task_telemetry),
+    current_user: User = Depends(security.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get published app metadata for task workspace."""
+    return task_kinds_service.get_published_app(
+        db=db, task_id=task_id, user_id=current_user.id
+    )
+
+
+@router.post("/{task_id}/publish", response_model=PublishAppResponse)
+def publish_task_app(
+    request: PublishAppRequest,
+    task_id: int = Depends(with_task_telemetry),
+    current_user: User = Depends(security.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Publish app for a code task workspace with single-app-per-user constraint."""
+    return task_kinds_service.publish_task_app(
+        db=db,
+        task_id=task_id,
+        user_id=current_user.id,
+        app_name=request.app_name,
+        public_url=request.public_url,
+        entry_path=request.entry_path,
+    )
+
+
+@router.delete("/{task_id}/publish", response_model=PublishAppResponse)
+def unpublish_task_app(
+    task_id: int = Depends(with_task_telemetry),
+    current_user: User = Depends(security.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Unpublish app for task workspace."""
+    return task_kinds_service.unpublish_task_app(
+        db=db, task_id=task_id, user_id=current_user.id
     )

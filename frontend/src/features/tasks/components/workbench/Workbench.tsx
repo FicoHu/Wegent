@@ -24,7 +24,7 @@ import {
 import EnhancedMarkdown from '@/components/common/EnhancedMarkdown'
 import { useTheme } from '@/features/theme/ThemeProvider'
 import { useTranslation } from '@/hooks/useTranslation'
-import { taskApis, BranchDiffResponse } from '@/apis/tasks'
+import { taskApis, BranchDiffResponse, PublishAppResponse } from '@/apis/tasks'
 import DiffViewer from '../message/DiffViewer'
 import { TaskApp } from '@/types/api'
 import type { MessageBlock } from '../message/thinking/types'
@@ -220,6 +220,10 @@ export default function Workbench({
   const [loadingStateIndex, setLoadingStateIndex] = useState(0)
   const [tipIndex, setTipIndex] = useState(0)
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false) // Timeline collapse state
+  const [publishState, setPublishState] = useState<PublishAppResponse | null>(null)
+  const [isPublishing, setIsPublishing] = useState(false)
+  const [isPublishLoading, setIsPublishLoading] = useState(false)
+  const [publishError, setPublishError] = useState<string | null>(null)
   const prevAppRef = useRef<TaskApp | null | undefined>(undefined) // Track previous app state
   const { theme } = useTheme()
   const { t } = useTranslation()
@@ -233,6 +237,7 @@ export default function Workbench({
 
   // Determine if we should show content (either have workbench data or have blocks)
   const hasContent = displayData || (blocks && blocks.length > 0)
+  const taskId = taskNumber ? Number(taskNumber.replace('#', '')) : null
 
   // Loading state rotation (4 seconds)
   useEffect(() => {
@@ -246,6 +251,50 @@ export default function Workbench({
       return () => clearInterval(interval)
     }
   }, [displayData, t])
+
+  useEffect(() => {
+    const loadPublishState = async () => {
+      if (!taskId) {
+        setPublishState(null)
+        return
+      }
+      setIsPublishLoading(true)
+      try {
+        const response = await taskApis.getPublishedApp(taskId)
+        setPublishState(response)
+        setPublishError(null)
+      } catch (error) {
+        setPublishError(error instanceof Error ? error.message : String(error))
+      } finally {
+        setIsPublishLoading(false)
+      }
+    }
+
+    loadPublishState()
+  }, [taskId])
+
+  const handlePublishToggle = async () => {
+    if (!taskId) return
+    setIsPublishing(true)
+    try {
+      if (publishState?.published) {
+        const response = await taskApis.unpublishApp(taskId)
+        setPublishState(response)
+      } else {
+        const response = await taskApis.publishApp(taskId, {
+          app_name: app?.name || undefined,
+          public_url: app?.previewUrl || undefined,
+          entry_path: '/workspace',
+        })
+        setPublishState(response)
+      }
+      setPublishError(null)
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsPublishing(false)
+    }
+  }
 
   // Tips rotation (6 seconds, random)
   useEffect(() => {
@@ -1063,6 +1112,50 @@ export default function Workbench({
                 ) : activeTab === 'preview' && app ? (
                   // Preview Tab - iframe for app preview
                   <div className="h-full flex flex-col -mx-2 -mb-2 sm:-mx-3 lg:-mx-4">
+                    <div className="px-4 py-3 border-b border-border bg-surface flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-text-secondary">
+                          {publishState?.published
+                            ? t('tasks:workbench.publish.published')
+                            : t('tasks:workbench.publish.unpublished')}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handlePublishToggle}
+                          disabled={isPublishing || isPublishLoading}
+                          className={`h-11 min-w-[44px] px-4 rounded-md text-sm font-medium transition-colors ${
+                            publishState?.published
+                              ? 'bg-muted text-text-primary hover:bg-muted/80'
+                              : 'bg-primary text-white hover:bg-primary/90'
+                          }`}
+                          data-testid="publish-button"
+                        >
+                          {isPublishing
+                            ? t('tasks:workbench.publish.processing')
+                            : publishState?.published
+                              ? t('tasks:workbench.publish.unpublish')
+                              : t('tasks:workbench.publish.publish')}
+                        </button>
+                      </div>
+                      {publishState?.published && publishState.app?.public_url && (
+                        <div className="text-xs text-text-secondary">
+                          {t('tasks:workbench.publish.url_label')}:{' '}
+                          <a
+                            href={publishState.app.public_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline break-all"
+                          >
+                            {publishState.app.public_url}
+                          </a>
+                        </div>
+                      )}
+                      {publishError && (
+                        <div className="text-xs text-red-600" data-testid="publish-error-message">
+                          {publishError}
+                        </div>
+                      )}
+                    </div>
                     <div className="flex-1 min-h-0">
                       <iframe
                         src={app.previewUrl}

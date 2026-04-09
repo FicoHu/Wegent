@@ -158,7 +158,15 @@
     "loading_diff_message": "Loading diff...",
     "no_changes_between_branches": "No changes found between branches",
     "execution_timeline": "Execution Timeline",
-    "no_repository": "This task is not associated with a code repository"
+    "no_repository": "This task is not associated with a code repository",
+    "publish": {
+      "published": "Published app is active",
+      "unpublished": "This app is not published",
+      "publish": "Publish App",
+      "unpublish": "Unpublish",
+      "processing": "Processing...",
+      "url_label": "Public URL"
+    }
   },
   "thinking": {
     "execution_completed": "Execution Completed",

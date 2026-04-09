@@ -25,6 +25,7 @@ import BackgroundExecutionMonitorPanel from '@/features/admin/components/Backgro
 import DeviceMonitorPanel from '@/features/admin/components/DeviceMonitorPanel'
 import GlobalAdminSetupWizard from '@/features/admin/components/GlobalAdminSetupWizard'
 import IMChannelList from '@/features/admin/components/IMChannelList'
+import PublishedAppList from '@/features/admin/components/PublishedAppList'
 import { UserProvider, useUser } from '@/features/common/UserContext'
 import { TaskContextProvider } from '@/features/tasks/contexts/taskContext'
 import { ChatStreamProvider } from '@/features/tasks/contexts/chatStreamContext'
@@ -84,6 +85,7 @@ function AdminContent() {
         'im-channels',
         'monitor',
         'device-monitor',
+        'published-apps',
       ].includes(tab)
     ) {
       return tab as AdminTabId
@@ -153,6 +155,8 @@ function AdminContent() {
         return <BackgroundExecutionMonitorPanel />
       case 'device-monitor':
         return <DeviceMonitorPanel />
+      case 'published-apps':
+        return <PublishedAppList />
       default:
         return <UserList />
     }

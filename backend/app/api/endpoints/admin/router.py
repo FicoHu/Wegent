@@ -17,6 +17,7 @@ from app.api.endpoints.admin import (
     public_retrievers,
     public_shells,
     public_teams,
+    published_apps,
     stats,
     subscription_monitor,
     system_config,
@@ -42,3 +43,4 @@ router.include_router(subscription_monitor.router, tags=["admin-subscription-mon
 router.include_router(tasks.router, tags=["admin-tasks"])
 router.include_router(im_channels.router, tags=["admin-im-channels"])
 router.include_router(device_monitor.router, tags=["admin-device-monitor"])
+router.include_router(published_apps.router, tags=["admin-published-apps"])
