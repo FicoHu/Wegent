@@ -81,7 +81,13 @@ export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
     { id: 'im-channels', label: t('admin:tabs.im_channels'), icon: MessageSquare },
     { id: 'monitor', label: t('admin:tabs.monitor'), icon: Activity },
     { id: 'device-monitor', label: t('admin:tabs.device_monitor'), icon: Monitor },
-    { id: 'published-apps', label: t('admin:tabs.published_apps'), icon: AppWindow },
+    {
+      id: 'published-apps',
+      label: t('admin:tabs.published_apps', {
+        defaultValue: t('common:tabs.published_apps'),
+      }),
+      icon: AppWindow,
+    },
   ]
 
   // Update the indicator position when the active tab changes

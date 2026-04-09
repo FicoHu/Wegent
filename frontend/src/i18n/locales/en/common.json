@@ -81,6 +81,29 @@
     "feedback": "Feedback",
     "admin": "Admin"
   },
+  "tabs": {
+    "published_apps": "Published Apps"
+  },
+  "published_apps": {
+    "title": "Published Applications",
+    "search_placeholder": "Search app/url/workspace",
+    "search": "Search",
+    "loading": "Loading published applications...",
+    "empty": "No published applications",
+    "columns": {
+      "user_id": "User ID",
+      "app_name": "App",
+      "task_id": "Task ID",
+      "workspace": "Workspace",
+      "public_url": "Public URL",
+      "published_at": "Published At"
+    },
+    "pagination": {
+      "total": "Total: {{total}}",
+      "prev": "Prev",
+      "next": "Next"
+    }
+  },
   "sidebar": {
     "recent_visits": "Recent Visits",
     "light_mode": "Light Mode",

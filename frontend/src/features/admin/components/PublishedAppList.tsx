@@ -39,17 +39,21 @@ export default function PublishedAppList() {
 
   const totalPages = Math.max(1, Math.ceil(total / 20))
 
+  const tp = (key: string, options?: Record<string, unknown>) =>
+    t(`admin:published_apps.${key}`, {
+      ...options,
+      defaultValue: t(`common:published_apps.${key}`, options),
+    })
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-text-primary">
-          {t('admin:published_apps.title')}
-        </h2>
+        <h2 className="text-lg font-semibold text-text-primary">{tp('title')}</h2>
         <div className="flex items-center gap-2">
           <Input
             value={search}
             onChange={event => setSearch(event.target.value)}
-            placeholder={t('admin:published_apps.search_placeholder')}
+            placeholder={tp('search_placeholder')}
             className="w-64"
             data-testid="published-apps-search-input"
           />
@@ -61,7 +65,7 @@ export default function PublishedAppList() {
             }}
             data-testid="published-apps-search-button"
           >
-            {t('admin:published_apps.search')}
+            {tp('search')}
           </Button>
         </div>
       </div>
@@ -70,25 +74,25 @@ export default function PublishedAppList() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-text-secondary">
-              <th className="px-4 py-3">{t('admin:published_apps.columns.user_id')}</th>
-              <th className="px-4 py-3">{t('admin:published_apps.columns.app_name')}</th>
-              <th className="px-4 py-3">{t('admin:published_apps.columns.task_id')}</th>
-              <th className="px-4 py-3">{t('admin:published_apps.columns.workspace')}</th>
-              <th className="px-4 py-3">{t('admin:published_apps.columns.public_url')}</th>
-              <th className="px-4 py-3">{t('admin:published_apps.columns.published_at')}</th>
+              <th className="px-4 py-3">{tp('columns.user_id')}</th>
+              <th className="px-4 py-3">{tp('columns.app_name')}</th>
+              <th className="px-4 py-3">{tp('columns.task_id')}</th>
+              <th className="px-4 py-3">{tp('columns.workspace')}</th>
+              <th className="px-4 py-3">{tp('columns.public_url')}</th>
+              <th className="px-4 py-3">{tp('columns.published_at')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
                 <td className="px-4 py-6 text-text-secondary" colSpan={6}>
-                  {t('admin:published_apps.loading')}
+                  {tp('loading')}
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
                 <td className="px-4 py-6 text-text-secondary" colSpan={6}>
-                  {t('admin:published_apps.empty')}
+                  {tp('empty')}
                 </td>
               </tr>
             ) : (
@@ -124,7 +128,7 @@ export default function PublishedAppList() {
       </div>
 
       <div className="flex items-center justify-between text-sm text-text-secondary">
-        <span>{t('admin:published_apps.pagination.total', { total })}</span>
+        <span>{tp('pagination.total', { total })}</span>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -133,7 +137,7 @@ export default function PublishedAppList() {
             disabled={page <= 1}
             data-testid="published-apps-prev-button"
           >
-            {t('admin:published_apps.pagination.prev')}
+            {tp('pagination.prev')}
           </Button>
           <span>
             {page}/{totalPages}
@@ -145,7 +149,7 @@ export default function PublishedAppList() {
             disabled={page >= totalPages}
             data-testid="published-apps-next-button"
           >
-            {t('admin:published_apps.pagination.next')}
+            {tp('pagination.next')}
           </Button>
         </div>
       </div>
