@@ -21,9 +21,7 @@ router = APIRouter()
 
 
 def _get_publish_redis_client() -> redis.Redis:
-    redis_url = (
-        settings.REDIS_URL or f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/0"
-    )
+    redis_url = settings.REDIS_URL or "redis://localhost:6379/0"
     return redis.from_url(redis_url, decode_responses=True)
 
 
