@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
 export default function PublishedAppList() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [items, setItems] = useState<AdminPublishedApp[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -39,11 +39,40 @@ export default function PublishedAppList() {
 
   const totalPages = Math.max(1, Math.ceil(total / 20))
 
-  const tp = (key: string, options?: Record<string, unknown>) =>
-    t(`admin:published_apps.${key}`, {
+  const fallbackMap: Record<string, { zh: string; en: string }> = {
+    title: { zh: '已发布应用', en: 'Published Applications' },
+    search_placeholder: { zh: '搜索应用/地址/工作区', en: 'Search app/url/workspace' },
+    search: { zh: '搜索', en: 'Search' },
+    loading: { zh: '正在加载已发布应用...', en: 'Loading published applications...' },
+    empty: { zh: '暂无已发布应用', en: 'No published applications' },
+    'columns.user_id': { zh: '用户 ID', en: 'User ID' },
+    'columns.app_name': { zh: '应用名称', en: 'App' },
+    'columns.task_id': { zh: '任务 ID', en: 'Task ID' },
+    'columns.workspace': { zh: '工作区', en: 'Workspace' },
+    'columns.public_url': { zh: '访问地址', en: 'Public URL' },
+    'columns.published_at': { zh: '发布时间', en: 'Published At' },
+    'pagination.prev': { zh: '上一页', en: 'Prev' },
+    'pagination.next': { zh: '下一页', en: 'Next' },
+  }
+
+  const tp = (key: string, options?: Record<string, unknown>) => {
+    const translated = t(`admin:published_apps.${key}`, {
       ...options,
       defaultValue: t(`common:published_apps.${key}`, options),
     })
+    const unresolvedKey = `published_apps.${key}`
+    if (translated === unresolvedKey || translated === key) {
+      if (key === 'pagination.total') {
+        const totalValue = String(options?.total ?? 0)
+        return i18n.language?.startsWith('zh') ? `总数：${totalValue}` : `Total: ${totalValue}`
+      }
+      const fallback = fallbackMap[key]
+      if (fallback) {
+        return i18n.language?.startsWith('zh') ? fallback.zh : fallback.en
+      }
+    }
+    return translated
+  }
 
   return (
     <div className="space-y-4">

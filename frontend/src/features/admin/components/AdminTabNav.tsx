@@ -60,11 +60,21 @@ interface TabItem {
 }
 
 export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const isMobile = useIsMobile()
   const indicatorContainerRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [indicatorStyle, setIndicatorStyle] = useState({ width: 0, left: 0 })
+
+  const resolvePublishedTabLabel = () => {
+    const translated = t('admin:tabs.published_apps', {
+      defaultValue: t('common:tabs.published_apps'),
+    })
+    if (translated === 'tabs.published_apps' || translated === 'published_apps') {
+      return i18n.language?.startsWith('zh') ? '已发布应用' : 'Published Apps'
+    }
+    return translated
+  }
 
   // Tab items
   const tabs: TabItem[] = [
@@ -83,9 +93,7 @@ export function AdminTabNav({ activeTab, onTabChange }: AdminTabNavProps) {
     { id: 'device-monitor', label: t('admin:tabs.device_monitor'), icon: Monitor },
     {
       id: 'published-apps',
-      label: t('admin:tabs.published_apps', {
-        defaultValue: t('common:tabs.published_apps'),
-      }),
+      label: resolvePublishedTabLabel(),
       icon: AppWindow,
     },
   ]
