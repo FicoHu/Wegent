@@ -19,7 +19,7 @@ import {
   ArrowDownTrayIcon,
   EyeIcon,
 } from '@heroicons/react/24/outline'
-import { Loader2, UploadIcon, FileIcon, AlertCircle, EyeOffIcon } from 'lucide-react'
+import { Loader2, UploadIcon, FileIcon, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useTranslation } from '@/hooks/useTranslation'
 import {
