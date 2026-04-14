@@ -80,6 +80,7 @@ const SetupSkillStep: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
+  const [isAdminOnly, setIsAdminOnly] = useState(true)
 
   // Git import states
   const [gitUrl, setGitUrl] = useState('')
@@ -182,6 +183,7 @@ const SetupSkillStep: React.FC = () => {
     setSelectedFile(null)
     setUploadProgress(0)
     setError(null)
+    setIsAdminOnly(true)
   }
 
   const handleUploadSubmit = async () => {
@@ -200,7 +202,7 @@ const SetupSkillStep: React.FC = () => {
     setUploadProgress(0)
 
     try {
-      await uploadPublicSkill(selectedFile, skillName.trim(), setUploadProgress)
+      await uploadPublicSkill(selectedFile, skillName.trim(), isAdminOnly, setUploadProgress)
       toast({ title: t('setup_wizard.skill_step.skill_uploaded') })
       setIsUploadDialogOpen(false)
       resetUploadForm()
@@ -590,6 +592,24 @@ const SetupSkillStep: React.FC = () => {
                         </p>
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Admin Only Toggle */}
+                <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="admin-only"
+                    checked={isAdminOnly}
+                    onChange={e => setIsAdminOnly(e.target.checked)}
+                    disabled={uploading}
+                    className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="admin-only" className="text-sm font-medium cursor-pointer">
+                      {t('skills.admin_only_label')}
+                    </Label>
+                    <p className="text-xs text-text-muted">{t('skills.admin_only_description')}</p>
                   </div>
                 </div>
 

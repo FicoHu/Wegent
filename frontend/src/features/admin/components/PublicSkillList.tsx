@@ -19,7 +19,7 @@ import {
   ArrowDownTrayIcon,
   EyeIcon,
 } from '@heroicons/react/24/outline'
-import { Loader2, UploadIcon, FileIcon, AlertCircle } from 'lucide-react'
+import { Loader2, UploadIcon, FileIcon, AlertCircle, EyeOffIcon } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useTranslation } from '@/hooks/useTranslation'
 import {
@@ -75,6 +75,7 @@ const PublicSkillList: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [isAdminOnly, setIsAdminOnly] = useState(true)
 
   const fetchSkills = useCallback(async () => {
     setLoading(true)
@@ -174,10 +175,10 @@ const PublicSkillList: React.FC = () => {
 
     try {
       if (isEditMode && selectedSkill) {
-        await updatePublicSkillWithUpload(selectedSkill.id, selectedFile, setUploadProgress)
+        await updatePublicSkillWithUpload(selectedSkill.id, selectedFile, undefined, setUploadProgress)
         toast({ title: t('public_skills.success.updated') })
       } else {
-        await uploadPublicSkill(selectedFile, skillName.trim(), setUploadProgress)
+        await uploadPublicSkill(selectedFile, skillName.trim(), isAdminOnly, setUploadProgress)
         toast({ title: t('public_skills.success.uploaded') })
       }
       setIsUploadDialogOpen(false)
@@ -256,6 +257,7 @@ const PublicSkillList: React.FC = () => {
     setError(null)
     setSelectedSkill(null)
     setIsEditMode(false)
+    setIsAdminOnly(true)
   }
 
   const openUploadDialog = (skill?: UnifiedSkill) => {
@@ -263,6 +265,7 @@ const PublicSkillList: React.FC = () => {
       setSelectedSkill(skill)
       setSkillName(skill.name)
       setIsEditMode(true)
+      setIsAdminOnly(skill.isAdminOnly ?? false)
     } else {
       resetUploadForm()
     }
@@ -504,6 +507,26 @@ const PublicSkillList: React.FC = () => {
                   <span className="text-text-secondary">{uploadProgress}%</span>
                 </div>
                 <Progress value={uploadProgress} />
+              </div>
+            )}
+
+            {/* Admin Only Toggle (only for create mode) */}
+            {!isEditMode && (
+              <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="admin-only"
+                  checked={isAdminOnly}
+                  onChange={e => setIsAdminOnly(e.target.checked)}
+                  disabled={uploading}
+                  className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="admin-only" className="text-sm font-medium cursor-pointer">
+                    {t('skills.admin_only_label')}
+                  </Label>
+                  <p className="text-xs text-text-muted">{t('skills.admin_only_description')}</p>
+                </div>
               </div>
             )}
 
