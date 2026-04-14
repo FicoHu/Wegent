@@ -731,6 +731,12 @@ class SkillSpec(BaseModel):
         "Tracks where the skill was imported from (upload or git repository). "
         "Used to enable updating skills from their original Git source.",
     )
+    isAdminOnly: Optional[bool] = Field(
+        False,
+        description="Whether this skill is only visible to admins in system management page. "
+        "Only applies to public skills (user_id=0). When true, regular users cannot see "
+        "this skill in skill selectors. Defaults to false for backward compatibility.",
+    )
 
     @field_validator("version", mode="before")
     @classmethod

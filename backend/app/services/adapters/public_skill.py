@@ -39,6 +39,7 @@ class PublicSkillAdapter:
             "is_active": kind.is_active,
             "is_public": True,
             "user_id": kind.user_id,
+            "isAdminOnly": spec.get("isAdminOnly", False),
             "created_at": kind.created_at,
             "updated_at": kind.updated_at,
         }

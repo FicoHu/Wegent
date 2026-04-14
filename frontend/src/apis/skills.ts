@@ -312,6 +312,8 @@ export interface UnifiedSkill {
   user_id: number // ID of the user who uploaded this skill
   /** Source information for git-imported skills */
   source?: SkillSource
+  /** Whether this skill is only visible to admins (only for public skills) */
+  isAdminOnly?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -410,10 +412,12 @@ export async function invokeSkill(skillName: string): Promise<{ prompt: string }
 
 /**
  * Upload a new public skill (Admin only)
+ * @param isAdminOnly - Whether this skill is only visible to admins (default: true)
  */
 export async function uploadPublicSkill(
   file: File,
   name: string,
+  isAdminOnly: boolean = true,
   onProgress?: (progress: number) => void
 ): Promise<UnifiedSkill> {
   const token = getToken()
@@ -422,6 +426,7 @@ export async function uploadPublicSkill(
   const formData = new FormData()
   formData.append('file', file)
   formData.append('name', name)
+  formData.append('is_admin_only', isAdminOnly.toString())
 
   const url = `${getApiUrl()}/v1/kinds/skills/public/upload`
 
@@ -467,10 +472,12 @@ export async function uploadPublicSkill(
 
 /**
  * Update an existing public skill with new ZIP (Admin only)
+ * @param isAdminOnly - Optional visibility flag (preserves existing if not provided)
  */
 export async function updatePublicSkillWithUpload(
   skillId: number,
   file: File,
+  isAdminOnly?: boolean,
   onProgress?: (progress: number) => void
 ): Promise<UnifiedSkill> {
   const token = getToken()
@@ -478,6 +485,9 @@ export async function updatePublicSkillWithUpload(
 
   const formData = new FormData()
   formData.append('file', file)
+  if (isAdminOnly !== undefined) {
+    formData.append('is_admin_only', isAdminOnly.toString())
+  }
 
   const url = `${getApiUrl()}/v1/kinds/skills/public/${skillId}/upload`
 
@@ -543,6 +553,37 @@ export async function deletePublicSkill(skillId: number): Promise<void> {
       throw new Error(error || 'Failed to delete public skill')
     }
   }
+}
+
+/**
+ * Update public skill visibility (Admin only)
+ * @param skillId - Skill ID
+ * @param isAdminOnly - Whether this skill is only visible to admins
+ */
+export async function updatePublicSkillVisibility(
+  skillId: number,
+  isAdminOnly: boolean
+): Promise<{ id: number; name: string; isAdminOnly: boolean; message: string }> {
+  const token = getToken()
+  if (!token) throw new Error('No authentication token')
+
+  const url = `${getApiUrl()}/v1/kinds/skills/public/${skillId}/visibility?is_admin_only=${isAdminOnly}`
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    try {
+      const json = JSON.parse(error)
+      throw new Error(json.detail || 'Failed to update skill visibility')
+    } catch {
+      throw new Error(error || 'Failed to update skill visibility')
+    }
+  }
+
+  return response.json()
 }
 
 /**

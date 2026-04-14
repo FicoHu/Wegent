@@ -15,6 +15,8 @@ import {
   importGitRepoSkills,
   scanGitRepoPublicSkills,
   importGitRepoPublicSkills,
+  uploadPublicSkill,
+  updatePublicSkillWithUpload,
   GitSkillInfo,
   GitImportResponse,
 } from '@/apis/skills'
@@ -105,6 +107,9 @@ export default function SkillUploadModal({
   const [dragActive, setDragActive] = useState(false)
   const [overwriteDialogOpen, setOverwriteDialogOpen] = useState(false)
   const [existingSkill, setExistingSkill] = useState<Skill | null>(null)
+  const [isAdminOnly, setIsAdminOnly] = useState(
+    isPublic ? ((skill as UnifiedSkill)?.isAdminOnly ?? true) : false
+  )
 
   // Git import tab state
   const [gitUrl, setGitUrl] = useState('')
@@ -230,15 +235,30 @@ export default function SkillUploadModal({
     setUploadProgress(0)
 
     try {
-      if (isEditMode && skill) {
-        const skillId = getSkillId(skill)
-        await updateSkill(skillId, selectedFile, setUploadProgress)
-      } else if (overwrite && existingSkill) {
-        // Update existing skill
-        const skillId = parseInt(existingSkill.metadata.labels?.id || '0')
-        await updateSkill(skillId, selectedFile, setUploadProgress)
+      if (isPublic) {
+        // Public skill upload/update
+        if (isEditMode && skill) {
+          const skillId = getSkillId(skill)
+          await updatePublicSkillWithUpload(skillId, selectedFile, isAdminOnly, setUploadProgress)
+        } else if (overwrite && existingSkill) {
+          // Update existing skill
+          const skillId = parseInt(existingSkill.metadata.labels?.id || '0')
+          await updatePublicSkillWithUpload(skillId, selectedFile, isAdminOnly, setUploadProgress)
+        } else {
+          await uploadPublicSkill(selectedFile, skillName.trim(), isAdminOnly, setUploadProgress)
+        }
       } else {
-        await uploadSkill(selectedFile, skillName.trim(), namespace, setUploadProgress)
+        // Personal/group skill upload/update
+        if (isEditMode && skill) {
+          const skillId = getSkillId(skill)
+          await updateSkill(skillId, selectedFile, setUploadProgress)
+        } else if (overwrite && existingSkill) {
+          // Update existing skill
+          const skillId = parseInt(existingSkill.metadata.labels?.id || '0')
+          await updateSkill(skillId, selectedFile, setUploadProgress)
+        } else {
+          await uploadSkill(selectedFile, skillName.trim(), namespace, setUploadProgress)
+        }
       }
       onClose(true)
     } catch (err) {
@@ -447,6 +467,9 @@ export default function SkillUploadModal({
               error={error}
               dragActive={dragActive}
               isEditMode={isEditMode}
+              isPublic={isPublic}
+              isAdminOnly={isAdminOnly}
+              setIsAdminOnly={isPublic ? setIsAdminOnly : undefined}
               handleFileChange={handleFileChange}
               handleDrag={handleDrag}
               handleDrop={handleDrop}
@@ -482,6 +505,9 @@ export default function SkillUploadModal({
                   error={error}
                   dragActive={dragActive}
                   isEditMode={isEditMode}
+                  isPublic={isPublic}
+                  isAdminOnly={isAdminOnly}
+                  setIsAdminOnly={isPublic ? setIsAdminOnly : undefined}
                   handleFileChange={handleFileChange}
                   handleDrag={handleDrag}
                   handleDrop={handleDrop}
@@ -593,6 +619,9 @@ interface UploadFormProps {
   error: string | null
   dragActive: boolean
   isEditMode: boolean
+  isPublic?: boolean
+  isAdminOnly?: boolean
+  setIsAdminOnly?: (value: boolean) => void
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   handleDrag: (e: React.DragEvent) => void
   handleDrop: (e: React.DragEvent) => void
@@ -610,6 +639,9 @@ function UploadForm({
   error,
   dragActive,
   isEditMode,
+  isPublic = false,
+  isAdminOnly = false,
+  setIsAdminOnly,
   handleFileChange,
   handleDrag,
   handleDrop,
@@ -631,6 +663,24 @@ function UploadForm({
             disabled={uploading}
           />
           <p className="text-xs text-text-muted">{t('skills.skill_name_hint')}</p>
+        </div>
+      )}
+
+      {/* Admin Only Checkbox (only for public skills) */}
+      {isPublic && setIsAdminOnly && (
+        <div className="flex items-start space-x-2 p-3 bg-muted/50 rounded-lg">
+          <Checkbox
+            id="admin-only"
+            checked={isAdminOnly}
+            onCheckedChange={checked => setIsAdminOnly(checked === true)}
+            disabled={uploading}
+          />
+          <div className="grid gap-1.5 leading-none">
+            <Label htmlFor="admin-only" className="text-sm font-medium cursor-pointer">
+              {t('skills.admin_only_label')}
+            </Label>
+            <p className="text-xs text-text-muted">{t('skills.admin_only_description')}</p>
+          </div>
         </div>
       )}
 
