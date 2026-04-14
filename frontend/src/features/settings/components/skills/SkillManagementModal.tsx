@@ -31,7 +31,6 @@ import {
   updateSkillFromGit,
   updatePublicSkillVisibility,
 } from '@/apis/skills'
-import { useUser } from '@/contexts/UserContext'
 import SkillUploadModal from './SkillUploadModal'
 import { SkillReferenceConflictDialog } from './SkillReferenceConflictDialog'
 import UnifiedAddButton from '@/components/common/UnifiedAddButton'
