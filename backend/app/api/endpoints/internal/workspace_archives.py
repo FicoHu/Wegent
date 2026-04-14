@@ -40,7 +40,7 @@ async def archive_task_workspace(
         .filter(
             TaskResource.id == task_id,
             TaskResource.kind == "Task",
-            TaskResource.is_active == TaskResource.STATE_ACTIVE,
+            TaskResource.is_active.in_(TaskResource.is_active_query()),
         )
         .first()
     )
