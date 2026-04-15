@@ -607,9 +607,11 @@ const SetupSkillStep: React.FC = () => {
                   />
                   <div className="space-y-1">
                     <Label htmlFor="admin-only" className="text-sm font-medium cursor-pointer">
-                      {t('skills.admin_only_label')}
+                      {t('common:skills.admin_only_label')}
                     </Label>
-                    <p className="text-xs text-text-muted">{t('skills.admin_only_description')}</p>
+                    <p className="text-xs text-text-muted">
+                      {t('common:skills.admin_only_description')}
+                    </p>
                   </div>
                 </div>
 
