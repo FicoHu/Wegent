@@ -73,6 +73,8 @@ class TaskCreationParams:
     # When set and different from current bot_id, a new session will be created
     # This ensures each pipeline stage has independent context
     previous_bot_id: Optional[int] = None
+    # Pipeline confirmation marks the task PENDING before creating next-stage subtasks.
+    allow_pending_status: bool = False
     # Device ID for local device execution (saved at task creation to avoid race condition)
     device_id: Optional[str] = None
     # Video generation parameters (user-selected at generation time)
@@ -184,19 +186,27 @@ def get_task_with_access_check(
     return None, user_id
 
 
-def check_task_status(db: Session, task: TaskResource) -> None:
+def check_task_status(
+    task: TaskResource,
+    *,
+    allow_pending: bool = False,
+) -> None:
     """
     Check if task is in a valid state for new messages.
 
     Args:
-        db: Database session
         task: Task resource to check
+        allow_pending: Whether PENDING is allowed for internal pipeline handoff
 
     Raises:
         HTTPException: If task is still running or pending
     """
     task_crd = Task.model_validate(task.json)
-    if task_crd.status and task_crd.status.status in ("RUNNING", "PENDING"):
+    if not task_crd.status:
+        return
+
+    status = task_crd.status.status
+    if status == "RUNNING" or (status == "PENDING" and not allow_pending):
         raise HTTPException(status_code=400, detail="Task is still running")
 
 
@@ -692,7 +702,7 @@ async def create_task_and_subtasks(
         # Get existing task with access check
         task, subtask_user_id = get_task_with_access_check(db, task_id, user.id)
         if task:
-            check_task_status(db, task)
+            check_task_status(task, allow_pending=params.allow_pending_status)
             if should_trigger_ai:
                 mark_task_pending(task)
             # Update modelId in existing task if provided

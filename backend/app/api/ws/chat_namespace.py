@@ -464,6 +464,8 @@ class ChatNamespace(socketio.AsyncNamespace):
 
         db = SessionLocal()
         pipeline_info = None
+        pipeline_previous_bot_id = None
+        allow_pending_status = False
         try:
             # Get user
             user = db.query(User).filter(User.id == user_id).first()
@@ -513,6 +515,11 @@ class ChatNamespace(socketio.AsyncNamespace):
                             )
                         }
 
+                    pipeline_previous_bot_id = confirm_result.get(
+                        "current_stage_bot_id"
+                    )
+                    allow_pending_status = True
+
                     # Emit task:status event to notify frontend that task status changed
                     # This triggers PipelineStageIndicator to re-fetch pipeline stage info
                     task_room = f"task:{payload.task_id}"
@@ -526,7 +533,7 @@ class ChatNamespace(socketio.AsyncNamespace):
                         room=task_room,
                     )
                     logger.info(
-                        f"[WS] pipeline:confirm emitted task:status PENDING for task {payload.task_id}"
+                        f"[WS] pipeline:confirm emitted task:status RUNNING for task {payload.task_id}"
                     )
 
                 # Get pipeline info (unified logic for all pipeline operations)
@@ -645,8 +652,8 @@ class ChatNamespace(socketio.AsyncNamespace):
                 }
 
             # For pipeline confirm, get the previous stage's bot_id for session management
-            previous_bot_id = None
-            if pipeline_info:
+            previous_bot_id = pipeline_previous_bot_id
+            if previous_bot_id is None and pipeline_info:
                 previous_bot_id = pipeline_info.get("current_stage_bot_id")
 
             params = TaskCreationParams(
@@ -669,6 +676,7 @@ class ChatNamespace(socketio.AsyncNamespace):
                 # TaskRequestBuilder will compare this with current bot_id to determine
                 # if a new session is needed (different bot = new session)
                 previous_bot_id=previous_bot_id,
+                allow_pending_status=allow_pending_status,
                 device_id=payload.device_id,
                 generate_params=generate_params_dict,
             )
