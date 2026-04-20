@@ -382,6 +382,13 @@ docker compose up -d     # 启动
         </a>
     </td>
     <td align="center">
+        <a href="https://github.com/cocowh">
+            <img src="https://avatars.githubusercontent.com/u/17496282?v=4" width="80;" alt="cocowh"/>
+            <br />
+            <sub><b>Birch</b></sub>
+        </a>
+    </td>
+    <td align="center">
         <a href="https://github.com/haosenwang1018">
             <img src="https://avatars.githubusercontent.com/u/167664334?v=4" width="80;" alt="haosenwang1018"/>
             <br />
@@ -394,13 +401,6 @@ docker compose up -d     # 启动
             <br />
             <sub><b>Li Daiyan</b></sub>
         </a>
-    </td>
-    <td align="center">
-        <a href="https://github.com/qwertyerge">
-            <img src="https://avatars.githubusercontent.com/u/13088125?v=4" width="80;" alt="qwertyerge"/>
-            <br />
-            <sub><b>Erdawang</b></sub>
-        </a>
     </td></tr>
 <tr>
     <td align="center">
@@ -408,6 +408,13 @@ docker compose up -d     # 启动
             <img src="https://avatars.githubusercontent.com/u/1886887?v=4" width="80;" alt="sunnights"/>
             <br />
             <sub><b>Jake Zhang</b></sub>
+        </a>
+    </td>
+    <td align="center">
+        <a href="https://github.com/qwertyerge">
+            <img src="https://avatars.githubusercontent.com/u/13088125?v=4" width="80;" alt="qwertyerge"/>
+            <br />
+            <sub><b>Erdawang</b></sub>
         </a>
     </td>
     <td align="center">
