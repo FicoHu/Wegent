@@ -25,7 +25,7 @@ from app.services.executor_cleanup_cursor_service import (
 
 logger = logging.getLogger(__name__)
 
-CLEANUP_TARGET_DELETED_EXECUTORS_PER_RUN = 200
+CLEANUP_TARGET_DELETED_EXECUTORS_PER_RUN = 2000
 CLEANUP_MAX_BATCHES_PER_RUN = 50
 
 
@@ -144,6 +144,13 @@ class JobService(BaseService[Kind, None, None]):
                 total_deleted += batch_deleted_count
 
             if total_deleted < CLEANUP_TARGET_DELETED_EXECUTORS_PER_RUN:
+                logger.info(
+                    "[executor_job] Starting lookback scan "
+                    "lookback_by=created_at lookback_start=%s cutoff=%s limit=%d",
+                    lookback_start,
+                    cutoff,
+                    self._get_lookback_scan_limit(),
+                )
                 lookback_subtasks = self._scan_lookback_subtasks_batch(
                     db=db,
                     lookback_start=lookback_start,
@@ -239,7 +246,7 @@ class JobService(BaseService[Kind, None, None]):
         cutoff: datetime,
         limit: int,
     ) -> List[Subtask]:
-        """Load a bounded lookback window for records that recently became eligible."""
+        """Load a bounded created_at window for rows that may have become eligible."""
         return (
             db.query(Subtask)
             .filter(
@@ -251,13 +258,13 @@ class JobService(BaseService[Kind, None, None]):
                         SubtaskStatus.CANCELLED,
                     ]
                 ),
-                Subtask.updated_at > lookback_start,
-                Subtask.updated_at <= cutoff,
+                Subtask.created_at > lookback_start,
+                Subtask.created_at <= cutoff,
                 Subtask.executor_name.isnot(None),
                 Subtask.executor_name != "",
                 Subtask.executor_deleted_at == False,
             )
-            .order_by(Subtask.updated_at.asc(), Subtask.id.asc())
+            .order_by(Subtask.created_at.asc(), Subtask.id.asc())
             .limit(limit)
             .all()
         )

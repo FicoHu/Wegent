@@ -4,6 +4,7 @@
 
 """Tests for persisted executor cleanup progress and lookback scanning."""
 
+import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
@@ -263,3 +264,110 @@ class TestExecutorCleanupProgress:
         mock_executor_service.delete_executor_task_sync.assert_called_once_with(
             "executor-12", "default"
         )
+
+    def test_lookback_scan_uses_created_at_window_and_defers_updated_at_cutoff(
+        self, job_service, test_db
+    ):
+        """Test lookback scanning uses created_at while Python keeps updated_at cutoff filtering."""
+        now = datetime.now()
+        lookback_start = now - timedelta(hours=48)
+        cutoff = now - timedelta(hours=24)
+
+        included_stale = Subtask(
+            user_id=1,
+            task_id=1,
+            team_id=1,
+            title="included-stale",
+            bot_ids=[1],
+            role=SubtaskRole.ASSISTANT,
+            executor_name="executor-stale",
+            executor_namespace="default",
+            executor_deleted_at=False,
+            status=SubtaskStatus.COMPLETED,
+            created_at=now - timedelta(hours=36),
+            updated_at=now - timedelta(hours=72),
+            completed_at=now - timedelta(hours=36),
+        )
+        deferred_recent = Subtask(
+            user_id=1,
+            task_id=1,
+            team_id=1,
+            title="deferred-recent",
+            bot_ids=[1],
+            role=SubtaskRole.ASSISTANT,
+            executor_name="executor-recent",
+            executor_namespace="default",
+            executor_deleted_at=False,
+            status=SubtaskStatus.COMPLETED,
+            created_at=now - timedelta(hours=30),
+            updated_at=now - timedelta(hours=12),
+            completed_at=now - timedelta(hours=30),
+        )
+        excluded_old_created = Subtask(
+            user_id=1,
+            task_id=1,
+            team_id=1,
+            title="excluded-old-created",
+            bot_ids=[1],
+            role=SubtaskRole.ASSISTANT,
+            executor_name="executor-old-created",
+            executor_namespace="default",
+            executor_deleted_at=False,
+            status=SubtaskStatus.COMPLETED,
+            created_at=now - timedelta(hours=72),
+            updated_at=now - timedelta(hours=36),
+            completed_at=now - timedelta(hours=72),
+        )
+
+        test_db.add_all([included_stale, deferred_recent, excluded_old_created])
+        test_db.commit()
+
+        scanned = job_service._scan_lookback_subtasks_batch(
+            test_db,
+            lookback_start=lookback_start,
+            cutoff=cutoff,
+            limit=10,
+        )
+        scanned_ids = {subtask.id for subtask in scanned}
+
+        assert included_stale.id in scanned_ids
+        assert deferred_recent.id in scanned_ids
+        assert excluded_old_created.id not in scanned_ids
+
+        filtered = job_service._filter_scanned_subtasks(scanned, chat_cutoff=cutoff)
+        filtered_ids = {subtask.id for subtask in filtered}
+
+        assert included_stale.id in filtered_ids
+        assert deferred_recent.id not in filtered_ids
+
+    def test_cleanup_logs_lookback_by_created_at_when_primary_scan_is_empty(
+        self, job_service, test_db, caplog
+    ):
+        """Test cleanup logs the lookback scan mode explicitly."""
+        with (
+            patch(
+                "app.services.executor_cleanup_cursor_service.cache_manager"
+            ) as mock_cache,
+            _patched_cleanup_settings(),
+            patch.object(
+                job_service,
+                "_scan_candidate_subtasks_batch",
+                return_value=[],
+            ),
+            patch.object(
+                job_service,
+                "_scan_lookback_subtasks_batch",
+                return_value=[],
+                create=True,
+            ),
+            caplog.at_level(logging.INFO, logger="app.services.adapters.executor_job"),
+        ):
+            mock_cache.get_sync.return_value = {
+                "last_scanned_subtask_id": 123,
+                "updated_at": datetime.now().isoformat(),
+            }
+            mock_cache.set_sync.return_value = True
+
+            job_service.cleanup_stale_executors(test_db)
+
+        assert "lookback_by=created_at" in caplog.text
