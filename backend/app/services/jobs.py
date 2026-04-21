@@ -14,11 +14,11 @@ Note: Subscription scheduling has been migrated to Celery. See:
 import asyncio
 import logging
 import threading
-import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core.cache import cache_manager
 from app.core.config import settings
+from app.core.distributed_lock import distributed_lock
 from app.db.session import SessionLocal
 from app.services.adapters.executor_job import job_service
 from app.services.repository_job import repository_job_service
@@ -30,6 +30,11 @@ REPO_UPDATE_LOCK_KEY = "repository_update_lock"
 REPO_UPDATE_LOCK_KEY_INTERVAL = settings.REPO_UPDATE_INTERVAL_SECONDS - 10
 if REPO_UPDATE_LOCK_KEY_INTERVAL < 10:
     REPO_UPDATE_LOCK_KEY_INTERVAL = 10
+
+# Redis lock keys for unread notification jobs
+HOURLY_NOTIFICATION_LOCK_KEY = "hourly_notification_lock"
+DAILY_NOTIFICATION_LOCK_KEY = "daily_notification_lock"
+EXECUTOR_CLEANUP_LOCK_KEY = "executor_cleanup_lock"
 
 
 async def acquire_repo_update_lock() -> bool:
@@ -82,11 +87,21 @@ def cleanup_worker(stop_event: threading.Event):
     # Periodically scan and cleanup stale executors for subtasks
     while not stop_event.is_set():
         try:
-            db = SessionLocal()
-            try:
-                job_service.cleanup_stale_executors(db)
-            finally:
-                db.close()
+            with distributed_lock.acquire_watchdog_context(
+                EXECUTOR_CLEANUP_LOCK_KEY,
+                expire_seconds=300,
+                extend_interval_seconds=60,
+            ) as acquired:
+                if not acquired:
+                    logger.info(
+                        "[job] Another instance is executing executor cleanup, skipping this execution"
+                    )
+                else:
+                    db = SessionLocal()
+                    try:
+                        job_service.cleanup_stale_executors(db)
+                    finally:
+                        db.close()
         except Exception as e:
             # Log and continue loop
             logger.error(f"[job] cleanup stale executors error: {e}")
