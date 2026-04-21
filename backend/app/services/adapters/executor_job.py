@@ -25,7 +25,7 @@ from app.services.executor_cleanup_cursor_service import (
 
 logger = logging.getLogger(__name__)
 
-CLEANUP_TARGET_DELETED_EXECUTORS_PER_RUN = 2000
+CLEANUP_TARGET_DELETED_EXECUTORS_PER_RUN = 200
 CLEANUP_MAX_BATCHES_PER_RUN = 50
 
 
