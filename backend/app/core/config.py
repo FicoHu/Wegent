@@ -169,6 +169,7 @@ class Settings(BaseSettings):
     # and updated_at exceeds this threshold, the executor task will be deleted automatically.
     CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS: int = 2
     CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS: int = 24
+    STALE_NON_TERMINAL_TASK_EXECUTOR_DELETE_AFTER_HOURS: int = 24
     # Cleanup scanning interval seconds
     TASK_EXECUTOR_CLEANUP_INTERVAL_SECONDS: int = 600
 

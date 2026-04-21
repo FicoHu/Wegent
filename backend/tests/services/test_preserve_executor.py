@@ -11,6 +11,7 @@ This module tests:
 3. Permission control for preserve executor operations
 """
 
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, Mock, patch
 
@@ -35,6 +36,7 @@ class CleanupExecutorTestHelpers:
         task.user_id = user_id
         task.kind = "Task"
         task.is_active = True
+        task.updated_at = datetime.now() - timedelta(hours=48)
 
         labels = {"taskType": "chat"}
         if preserve_executor:
@@ -102,6 +104,35 @@ class CleanupExecutorTestHelpers:
         mock_db.query.side_effect = query_side_effect
         return mock_subtask_query, mock_task_query
 
+    @contextmanager
+    def _patch_cleanup_scan(self, job_service, subtasks, task_map):
+        """Patch the scheduled cleanup scan helpers for one logical batch."""
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch.object(
+                    job_service,
+                    "_scan_candidate_subtasks_batch",
+                    side_effect=[subtasks, []],
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    job_service,
+                    "_load_tasks_for_cleanup",
+                    return_value=task_map,
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    job_service,
+                    "_get_cleanup_subtasks_for_task",
+                    side_effect=lambda _db, task_id: [
+                        subtask for subtask in subtasks if subtask.task_id == task_id
+                    ],
+                )
+            )
+            yield
+
 
 @pytest.mark.unit
 class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
@@ -125,38 +156,20 @@ class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
         mock_subtask = self._create_mock_subtask(1, 100)
         mock_task = self._create_mock_task_resource(100, 1, preserve_executor=True)
 
-        # Setup mock query chain for subtasks
-        mock_subtask_query = MagicMock()
-        mock_subtask_query.join.return_value = mock_subtask_query
-        mock_subtask_query.filter.return_value = mock_subtask_query
-        mock_subtask_query.all.return_value = [mock_subtask]
+        with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
+            patch(
+                "app.services.adapters.executor_job.executor_kinds_service"
+            ) as mock_executor_service,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+            mock_settings.STALE_NON_TERMINAL_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
 
-        # Setup mock query chain for task lookup
-        mock_task_query = MagicMock()
-        mock_task_query.filter.return_value = mock_task_query
-        mock_task_query.first.return_value = mock_task
+            job_service.cleanup_stale_executors(mock_db)
 
-        def query_side_effect(model):
-            if model == Subtask:
-                return mock_subtask_query
-            elif model == TaskResource:
-                return mock_task_query
-            return MagicMock()
-
-        mock_db.query.side_effect = query_side_effect
-
-        # Mock the delete executor function
-        with patch(
-            "app.services.adapters.executor_job.executor_kinds_service"
-        ) as mock_executor_service:
-            with patch("app.services.adapters.executor_job.settings") as mock_settings:
-                mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
-                mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
-
-                job_service.cleanup_stale_executors(mock_db)
-
-                # Verify delete_executor_task_sync was NOT called
-                mock_executor_service.delete_executor_task_sync.assert_not_called()
+        mock_executor_service.delete_executor_task_sync.assert_not_called()
 
     def test_cleans_up_task_without_preserve_flag(self, job_service, mock_db):
         """Test that tasks without preserveExecutor label are cleaned up normally"""
@@ -164,42 +177,22 @@ class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
         mock_subtask = self._create_mock_subtask(1, 100)
         mock_task = self._create_mock_task_resource(100, 1, preserve_executor=False)
 
-        # Setup mock query chain for subtasks
-        mock_subtask_query = MagicMock()
-        mock_subtask_query.join.return_value = mock_subtask_query
-        mock_subtask_query.filter.return_value = mock_subtask_query
-        mock_subtask_query.all.return_value = [mock_subtask]
-        mock_subtask_query.update.return_value = 1
+        with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
+            patch(
+                "app.services.adapters.executor_job.executor_kinds_service"
+            ) as mock_executor_service,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+            mock_executor_service.delete_executor_task_sync.return_value = True
 
-        # Setup mock query chain for task lookup
-        mock_task_query = MagicMock()
-        mock_task_query.filter.return_value = mock_task_query
-        mock_task_query.first.return_value = mock_task
+            job_service.cleanup_stale_executors(mock_db)
 
-        def query_side_effect(model):
-            if model == Subtask:
-                return mock_subtask_query
-            elif model == TaskResource:
-                return mock_task_query
-            return MagicMock()
-
-        mock_db.query.side_effect = query_side_effect
-
-        # Mock the delete executor function to succeed
-        with patch(
-            "app.services.adapters.executor_job.executor_kinds_service"
-        ) as mock_executor_service:
-            with patch("app.services.adapters.executor_job.settings") as mock_settings:
-                mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
-                mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
-                mock_executor_service.delete_executor_task_sync.return_value = True
-
-                job_service.cleanup_stale_executors(mock_db)
-
-                # Verify delete_executor_task_sync WAS called
-                mock_executor_service.delete_executor_task_sync.assert_called_once_with(
-                    "executor-1", "default"
-                )
+        mock_executor_service.delete_executor_task_sync.assert_called_once_with(
+            "executor-1", "default"
+        )
 
     def test_skips_task_with_preserve_executor_false(self, job_service, mock_db):
         """Test that tasks with preserveExecutor=false are cleaned up normally"""
@@ -209,42 +202,22 @@ class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
         # Explicitly set preserveExecutor to "false"
         mock_task.json["metadata"]["labels"]["preserveExecutor"] = "false"
 
-        # Setup mock query chain for subtasks
-        mock_subtask_query = MagicMock()
-        mock_subtask_query.join.return_value = mock_subtask_query
-        mock_subtask_query.filter.return_value = mock_subtask_query
-        mock_subtask_query.all.return_value = [mock_subtask]
-        mock_subtask_query.update.return_value = 1
+        with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
+            patch(
+                "app.services.adapters.executor_job.executor_kinds_service"
+            ) as mock_executor_service,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+            mock_executor_service.delete_executor_task_sync.return_value = True
 
-        # Setup mock query chain for task lookup
-        mock_task_query = MagicMock()
-        mock_task_query.filter.return_value = mock_task_query
-        mock_task_query.first.return_value = mock_task
+            job_service.cleanup_stale_executors(mock_db)
 
-        def query_side_effect(model):
-            if model == Subtask:
-                return mock_subtask_query
-            elif model == TaskResource:
-                return mock_task_query
-            return MagicMock()
-
-        mock_db.query.side_effect = query_side_effect
-
-        # Mock the delete executor function to succeed
-        with patch(
-            "app.services.adapters.executor_job.executor_kinds_service"
-        ) as mock_executor_service:
-            with patch("app.services.adapters.executor_job.settings") as mock_settings:
-                mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
-                mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
-                mock_executor_service.delete_executor_task_sync.return_value = True
-
-                job_service.cleanup_stale_executors(mock_db)
-
-                # Verify delete_executor_task_sync WAS called (preserveExecutor=false means cleanup)
-                mock_executor_service.delete_executor_task_sync.assert_called_once_with(
-                    "executor-1", "default"
-                )
+        mock_executor_service.delete_executor_task_sync.assert_called_once_with(
+            "executor-1", "default"
+        )
 
     def test_code_task_archives_before_cleanup(self, job_service, mock_db):
         """Test code tasks trigger archive before deleting the executor."""
@@ -253,26 +226,8 @@ class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
         mock_task.json["metadata"]["labels"]["taskType"] = "code"
         mock_subtask.updated_at = datetime.now() - timedelta(hours=72)
 
-        mock_subtask_query = MagicMock()
-        mock_subtask_query.join.return_value = mock_subtask_query
-        mock_subtask_query.filter.return_value = mock_subtask_query
-        mock_subtask_query.all.return_value = [mock_subtask]
-        mock_subtask_query.update.return_value = 1
-
-        mock_task_query = MagicMock()
-        mock_task_query.filter.return_value = mock_task_query
-        mock_task_query.first.return_value = mock_task
-
-        def query_side_effect(model):
-            if model == Subtask:
-                return mock_subtask_query
-            if model == TaskResource:
-                return mock_task_query
-            return MagicMock()
-
-        mock_db.query.side_effect = query_side_effect
-
         with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
             patch.object(job_service, "_archive_workspace_sync") as archive_mock,
             patch(
                 "app.services.adapters.executor_job.executor_kinds_service"
@@ -297,26 +252,8 @@ class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
         mock_task.json["metadata"]["labels"]["taskType"] = "code"
         mock_subtask.updated_at = datetime.now() - timedelta(hours=72)
 
-        mock_subtask_query = MagicMock()
-        mock_subtask_query.join.return_value = mock_subtask_query
-        mock_subtask_query.filter.return_value = mock_subtask_query
-        mock_subtask_query.all.return_value = [mock_subtask]
-        mock_subtask_query.update.return_value = 1
-
-        mock_task_query = MagicMock()
-        mock_task_query.filter.return_value = mock_task_query
-        mock_task_query.first.return_value = mock_task
-
-        def query_side_effect(model):
-            if model == Subtask:
-                return mock_subtask_query
-            if model == TaskResource:
-                return mock_task_query
-            return MagicMock()
-
-        mock_db.query.side_effect = query_side_effect
-
         with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
             patch.object(
                 job_service,
                 "_archive_workspace_sync",
@@ -342,25 +279,8 @@ class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
         mock_subtask = self._create_mock_subtask(1, 100)
         mock_task = self._create_mock_task_resource(100, 1, preserve_executor=False)
 
-        mock_subtask_query = MagicMock()
-        mock_subtask_query.join.return_value = mock_subtask_query
-        mock_subtask_query.filter.return_value = mock_subtask_query
-        mock_subtask_query.all.return_value = [mock_subtask]
-
-        mock_task_query = MagicMock()
-        mock_task_query.filter.return_value = mock_task_query
-        mock_task_query.first.return_value = mock_task
-
-        def query_side_effect(model):
-            if model == Subtask:
-                return mock_subtask_query
-            if model == TaskResource:
-                return mock_task_query
-            return MagicMock()
-
-        mock_db.query.side_effect = query_side_effect
-
         with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
             patch.object(job_service, "_mark_executor_deleted") as mark_deleted_mock,
             patch(
                 "app.services.adapters.executor_job.executor_kinds_service"
@@ -374,6 +294,58 @@ class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
             job_service.cleanup_stale_executors(mock_db)
 
         mark_deleted_mock.assert_called_once_with([1])
+
+    def test_cleanup_marks_deleted_when_executor_pod_is_missing(
+        self, job_service, mock_db
+    ):
+        """Test missing executor pods are treated as already deleted."""
+        mock_subtask = self._create_mock_subtask(1, 100)
+        mock_task = self._create_mock_task_resource(100, 1, preserve_executor=False)
+
+        with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
+            patch.object(job_service, "_mark_executor_deleted") as mark_deleted_mock,
+            patch(
+                "app.services.adapters.executor_job.executor_kinds_service"
+            ) as mock_executor_service,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+            mock_executor_service.delete_executor_task_sync.side_effect = HTTPException(
+                status_code=500,
+                detail="Pod 'executor-1' not found",
+            )
+
+            job_service.cleanup_stale_executors(mock_db)
+
+        mark_deleted_mock.assert_called_once_with([1])
+
+    def test_cleanup_does_not_mark_deleted_on_other_executor_errors(
+        self, job_service, mock_db
+    ):
+        """Test non-idempotent delete failures still leave executor state untouched."""
+        mock_subtask = self._create_mock_subtask(1, 100)
+        mock_task = self._create_mock_task_resource(100, 1, preserve_executor=False)
+
+        with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
+            patch.object(job_service, "_mark_executor_deleted") as mark_deleted_mock,
+            patch(
+                "app.services.adapters.executor_job.executor_kinds_service"
+            ) as mock_executor_service,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+            mock_executor_service.delete_executor_task_sync.side_effect = HTTPException(
+                status_code=500,
+                detail="delete failed",
+            )
+
+            job_service.cleanup_stale_executors(mock_db)
+
+        mark_deleted_mock.assert_not_called()
 
     def test_executor_deleted_flag_uses_short_lived_session(self, job_service, mock_db):
         """Test executor_deleted_at is updated in a separate short-lived session."""
@@ -408,25 +380,8 @@ class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
         mock_task.json["metadata"]["labels"]["taskType"] = "code"
         mock_subtask.updated_at = datetime.now() - timedelta(hours=2)
 
-        mock_subtask_query = MagicMock()
-        mock_subtask_query.join.return_value = mock_subtask_query
-        mock_subtask_query.filter.return_value = mock_subtask_query
-        mock_subtask_query.all.return_value = [mock_subtask]
-
-        mock_task_query = MagicMock()
-        mock_task_query.filter.return_value = mock_task_query
-        mock_task_query.first.return_value = mock_task
-
-        def query_side_effect(model):
-            if model == Subtask:
-                return mock_subtask_query
-            if model == TaskResource:
-                return mock_task_query
-            return MagicMock()
-
-        mock_db.query.side_effect = query_side_effect
-
         with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
             patch.object(job_service, "_archive_workspace_sync") as archive_mock,
             patch(
                 "app.services.adapters.executor_job.executor_kinds_service"
@@ -512,6 +467,397 @@ class TestCleanupStaleExecutorsWithPreserveFlag(CleanupExecutorTestHelpers):
             "executor-subscription-1", "default"
         )
         mark_deleted.assert_called_once_with([subtask.id])
+
+    def test_cleanup_stale_executors_includes_pending_subtasks(
+        self, job_service, test_db
+    ):
+        """Test scheduled cleanup also scans stale PENDING subtasks."""
+        task = TaskResource(
+            user_id=1,
+            kind="Task",
+            name="pending-subtask-task-100",
+            namespace="default",
+            is_active=TaskResource.STATE_ACTIVE,
+            json={
+                "kind": "Task",
+                "apiVersion": "agent.wecode.io/v1",
+                "metadata": {
+                    "name": "pending-subtask-task-100",
+                    "namespace": "default",
+                    "labels": {"taskType": "chat"},
+                },
+                "spec": {
+                    "title": "Pending Subtask Task",
+                    "prompt": "Run task",
+                    "teamRef": {"name": "team-1", "namespace": "default"},
+                    "workspaceRef": {"name": "workspace-1", "namespace": "default"},
+                },
+                "status": {
+                    "status": "COMPLETED",
+                    "progress": 100,
+                    "createdAt": datetime.now().isoformat(),
+                    "updatedAt": datetime.now().isoformat(),
+                },
+            },
+            updated_at=datetime.now() - timedelta(hours=48),
+        )
+        test_db.add(task)
+        test_db.commit()
+        test_db.refresh(task)
+
+        subtask = Subtask(
+            user_id=1,
+            task_id=task.id,
+            team_id=1,
+            title="assistant",
+            bot_ids=[1],
+            role=SubtaskRole.ASSISTANT,
+            status=SubtaskStatus.PENDING,
+            executor_name="executor-pending-1",
+            executor_namespace="default",
+            executor_deleted_at=False,
+            updated_at=datetime.now() - timedelta(hours=48),
+            completed_at=datetime.now() - timedelta(hours=48),
+        )
+        test_db.add(subtask)
+        test_db.commit()
+
+        with (
+            patch.object(job_service, "_mark_executor_deleted") as mark_deleted,
+            patch(
+                "app.services.adapters.executor_job.executor_kinds_service"
+            ) as executor_service,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+            mock_settings.STALE_NON_TERMINAL_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            executor_service.delete_executor_task_sync.return_value = {"success": True}
+
+            job_service.cleanup_stale_executors(test_db)
+
+        executor_service.delete_executor_task_sync.assert_called_once_with(
+            "executor-pending-1", "default"
+        )
+        mark_deleted.assert_called_once_with([subtask.id])
+
+    def test_cleanup_skips_invalid_task_json_and_continues(self, job_service, mock_db):
+        """Test invalid task JSON does not abort cleanup for other eligible tasks."""
+        invalid_subtask = self._create_mock_subtask(1, 100, executor_name="executor-1")
+        valid_subtask = self._create_mock_subtask(2, 200, executor_name="executor-2")
+        valid_task = self._create_mock_task_resource(200, 1, preserve_executor=False)
+        invalid_task = Mock(spec=TaskResource)
+        invalid_task.id = 100
+        invalid_task.user_id = 1
+        invalid_task.kind = "Task"
+        invalid_task.is_active = True
+        invalid_task.updated_at = datetime.now() - timedelta(hours=48)
+        invalid_task.json = {"invalid": "payload"}
+
+        with (
+            patch.object(
+                job_service,
+                "_scan_candidate_subtasks_batch",
+                side_effect=[[invalid_subtask, valid_subtask], []],
+                create=True,
+            ),
+            patch.object(
+                job_service,
+                "_load_tasks_for_cleanup",
+                return_value={100: invalid_task, 200: valid_task},
+                create=True,
+            ),
+            patch.object(
+                job_service,
+                "_get_cleanup_subtasks_for_task",
+                side_effect=lambda _db, task_id: {
+                    100: [invalid_subtask],
+                    200: [valid_subtask],
+                }[task_id],
+            ),
+            patch.object(job_service, "_cleanup_executor_entries") as cleanup_entries,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+
+            job_service.cleanup_stale_executors(mock_db)
+
+        cleanup_entries.assert_called_once_with(
+            db=mock_db,
+            task_id=200,
+            task=valid_task,
+            subtasks=[valid_subtask],
+        )
+
+    def test_cleanup_processes_candidates_in_batches(self, job_service, mock_db):
+        """Test scheduled cleanup scans subtasks in batches instead of one full query."""
+        first_subtask = self._create_mock_subtask(1, 100, executor_name="executor-1")
+        second_subtask = self._create_mock_subtask(2, 200, executor_name="executor-2")
+        first_task = self._create_mock_task_resource(100, 1, preserve_executor=False)
+        second_task = self._create_mock_task_resource(200, 1, preserve_executor=False)
+
+        with (
+            patch.object(
+                job_service,
+                "_scan_candidate_subtasks_batch",
+                side_effect=[[first_subtask], [second_subtask], []],
+                create=True,
+            ) as scan_batch,
+            patch.object(
+                job_service,
+                "_load_tasks_for_cleanup",
+                side_effect=[{100: first_task}, {200: second_task}],
+                create=True,
+            ) as load_tasks,
+            patch.object(
+                job_service,
+                "_get_cleanup_subtasks_for_task",
+                side_effect=lambda _db, task_id: {
+                    100: [first_subtask],
+                    200: [second_subtask],
+                }[task_id],
+            ),
+            patch.object(job_service, "_cleanup_executor_entries") as cleanup_entries,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+
+            job_service.cleanup_stale_executors(mock_db)
+
+        assert scan_batch.call_count == 3
+        assert load_tasks.call_count == 2
+        assert cleanup_entries.call_count == 2
+
+    def test_cleanup_logs_filter_stats_when_no_valid_candidates(
+        self, job_service, mock_db
+    ):
+        """Test cleanup summary logs include filter reason counts."""
+        missing_task_subtask = self._create_mock_subtask(
+            1, 100, executor_name="missing"
+        )
+        preserved_subtask = self._create_mock_subtask(2, 200, executor_name="preserved")
+        preserved_task = self._create_mock_task_resource(200, 1, preserve_executor=True)
+
+        with (
+            patch.object(
+                job_service,
+                "_scan_candidate_subtasks_batch",
+                side_effect=[[missing_task_subtask, preserved_subtask], []],
+                create=True,
+            ),
+            patch.object(
+                job_service,
+                "_load_tasks_for_cleanup",
+                return_value={200: preserved_task},
+                create=True,
+            ),
+            patch("app.services.adapters.executor_job.logger") as mock_logger,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+
+            job_service.cleanup_stale_executors(mock_db)
+
+        no_valid_call = next(
+            call
+            for call in mock_logger.info.call_args_list
+            if call.args
+            and call.args[0].startswith(
+                "[executor_job] No valid expired executor to clean up after task status check"
+            )
+        )
+        assert no_valid_call.args == (
+            "[executor_job] No valid expired executor to clean up after task status "
+            "check scanned=%d last_id=%d missing_task=%d invalid_task_payload=%d "
+            "non_terminal_task=%d stale_non_terminal_task=%d "
+            "preserve_executor=%d code_task_recent=%d task_updated_recent=%d",
+            2,
+            2,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+        )
+
+    def test_cleanup_allows_stale_non_terminal_tasks(self, job_service, mock_db):
+        """Test scheduled cleanup allows very old non-terminal parent tasks."""
+        mock_subtask = self._create_mock_subtask(1, 100)
+        mock_task = self._create_mock_task_resource(100, 1, preserve_executor=False)
+        mock_task.json["status"]["status"] = "RUNNING"
+        mock_task.updated_at = datetime.now() - timedelta(hours=72)
+
+        with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
+            patch.object(job_service, "_mark_executor_deleted") as mark_deleted_mock,
+            patch(
+                "app.services.adapters.executor_job.executor_kinds_service"
+            ) as mock_executor_service,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+            mock_settings.STALE_NON_TERMINAL_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_executor_service.delete_executor_task_sync.return_value = True
+
+            job_service.cleanup_stale_executors(mock_db)
+
+        mock_executor_service.delete_executor_task_sync.assert_called_once_with(
+            "executor-1", "default"
+        )
+        mark_deleted_mock.assert_called_once_with([1])
+
+    def test_cleanup_allows_pending_parent_tasks(self, job_service, mock_db):
+        """Test scheduled cleanup treats PENDING parent tasks as eligible."""
+        mock_subtask = self._create_mock_subtask(1, 100)
+        mock_task = self._create_mock_task_resource(100, 1, preserve_executor=False)
+        mock_task.json["status"]["status"] = "PENDING"
+        mock_task.json["metadata"]["labels"]["type"] = "subscription"
+        mock_task.updated_at = datetime.now()
+
+        with (
+            self._patch_cleanup_scan(job_service, [mock_subtask], {100: mock_task}),
+            patch.object(job_service, "_mark_executor_deleted") as mark_deleted_mock,
+            patch(
+                "app.services.adapters.executor_job.executor_kinds_service"
+            ) as mock_executor_service,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+            mock_settings.STALE_NON_TERMINAL_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_executor_service.delete_executor_task_sync.return_value = True
+
+            job_service.cleanup_stale_executors(mock_db)
+
+        mock_executor_service.delete_executor_task_sync.assert_called_once_with(
+            "executor-1", "default"
+        )
+        mark_deleted_mock.assert_called_once_with([1])
+
+    def test_cleanup_scans_past_first_ten_batches_until_deleted_target(
+        self, job_service, mock_db
+    ):
+        """Test cleanup is limited by deleted executors rather than the first ten batches."""
+        invalid_batches = [
+            [self._create_mock_subtask(batch_no, 1000 + batch_no)]
+            for batch_no in range(1, 11)
+        ]
+        valid_subtask = self._create_mock_subtask(11, 200, executor_name="executor-11")
+        valid_task = self._create_mock_task_resource(200, 1, preserve_executor=False)
+
+        with (
+            patch(
+                "app.services.adapters.executor_job.CLEANUP_TARGET_DELETED_EXECUTORS_PER_RUN",
+                1,
+                create=True,
+            ),
+            patch("app.services.adapters.executor_job.CLEANUP_MAX_BATCHES_PER_RUN", 20),
+            patch.object(
+                job_service,
+                "_scan_candidate_subtasks_batch",
+                side_effect=[*invalid_batches, [valid_subtask], []],
+                create=True,
+            ) as scan_batch,
+            patch.object(
+                job_service,
+                "_load_tasks_for_cleanup",
+                side_effect=[{}] * 10 + [{200: valid_task}],
+                create=True,
+            ),
+            patch.object(
+                job_service,
+                "_get_cleanup_subtasks_for_task",
+                return_value=[valid_subtask],
+            ),
+            patch.object(job_service, "_cleanup_executor_entries") as cleanup_entries,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+            cleanup_entries.return_value = {
+                "task_id": 200,
+                "deleted": True,
+                "skipped": False,
+                "reason": "executor_deleted",
+                "executors": [
+                    {
+                        "executor_name": "executor-11",
+                        "executor_namespace": "default",
+                    }
+                ],
+            }
+
+            job_service.cleanup_stale_executors(mock_db)
+
+        assert scan_batch.call_count == 11
+        cleanup_entries.assert_called_once_with(
+            db=mock_db,
+            task_id=200,
+            task=valid_task,
+            subtasks=[valid_subtask],
+        )
+
+    def test_cleanup_stops_after_reaching_deleted_target(self, job_service, mock_db):
+        """Test cleanup stops scanning once the per-run deleted target is reached."""
+        first_subtask = self._create_mock_subtask(1, 100, executor_name="executor-1")
+        second_subtask = self._create_mock_subtask(2, 200, executor_name="executor-2")
+        third_subtask = self._create_mock_subtask(3, 300, executor_name="executor-3")
+        first_task = self._create_mock_task_resource(100, 1, preserve_executor=False)
+        second_task = self._create_mock_task_resource(200, 1, preserve_executor=False)
+        third_task = self._create_mock_task_resource(300, 1, preserve_executor=False)
+
+        with (
+            patch(
+                "app.services.adapters.executor_job.CLEANUP_TARGET_DELETED_EXECUTORS_PER_RUN",
+                2,
+                create=True,
+            ),
+            patch("app.services.adapters.executor_job.CLEANUP_MAX_BATCHES_PER_RUN", 20),
+            patch.object(
+                job_service,
+                "_scan_candidate_subtasks_batch",
+                side_effect=[[first_subtask], [second_subtask], [third_subtask], []],
+                create=True,
+            ) as scan_batch,
+            patch.object(
+                job_service,
+                "_load_tasks_for_cleanup",
+                side_effect=[
+                    {100: first_task},
+                    {200: second_task},
+                    {300: third_task},
+                ],
+                create=True,
+            ),
+            patch.object(
+                job_service,
+                "_get_cleanup_subtasks_for_task",
+                side_effect=lambda _db, task_id: {
+                    100: [first_subtask],
+                    200: [second_subtask],
+                    300: [third_subtask],
+                }[task_id],
+            ),
+            patch.object(
+                job_service,
+                "_cleanup_executor_groups",
+                side_effect=[0, 1, 1],
+            ) as cleanup_groups,
+            patch("app.services.adapters.executor_job.settings") as mock_settings,
+        ):
+            mock_settings.CHAT_TASK_EXECUTOR_DELETE_AFTER_HOURS = 24
+            mock_settings.CODE_TASK_EXECUTOR_DELETE_AFTER_HOURS = 48
+
+            job_service.cleanup_stale_executors(mock_db)
+
+        assert scan_batch.call_count == 3
+        assert cleanup_groups.call_count == 3
 
 
 @pytest.mark.unit
