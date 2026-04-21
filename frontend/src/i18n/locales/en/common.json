@@ -966,7 +966,15 @@
     "update_failed_count": "{{count}} failed",
     "git_source": "Git Source",
     "namespace": "Namespace",
-    "batch_updating": "Batch updating..."
+    "batch_updating": "Batch updating...",
+    "admin_only": "Admin Only",
+    "admin_only_label": "Admin Only Visibility",
+    "admin_only_description": "When checked, this skill will only be visible to admins in system management",
+    "make_admin_only": "Make Admin Only",
+    "make_public": "Make Public",
+    "set_admin_only": "Skill \"{{skillName}}\" is now admin-only",
+    "set_public": "Skill \"{{skillName}}\" is now public",
+    "failed_update_visibility": "Failed to update skill visibility"
   },
   "models": {
     "label": "Model",

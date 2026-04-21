@@ -14,8 +14,9 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,9 @@ class UnifiedSkillResponse(BaseModel):
     user_id: int  # ID of the user who uploaded this skill
     source: Optional[SkillSourceResponse] = (
         None  # Source information for git-imported skills
+    )
+    isAdminOnly: Optional[bool] = Field(
+        False, description="Whether this skill is only visible to admins"
     )
     created_at: Any
     updated_at: Any
@@ -538,11 +542,21 @@ def batch_update_skills_from_git(
 def list_public_skills(
     skip: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(100, ge=1, le=100, description="Number of items to return"),
-    current_user: User = Depends(security.get_current_user),
+    include_admin_only: bool = Query(
+        True, description="Include admin-only skills (default: true for admin view)"
+    ),
+    current_user: User = Depends(security.get_admin_user),
     db: Session = Depends(get_db),
 ):
-    """List all public (system-level) skills."""
-    return public_skill_service.get_skills(db, skip=skip, limit=limit)
+    """List all public (system-level) skills (admin only).
+
+    By default, returns all public skills including admin-only ones.
+    Set include_admin_only=false to exclude admin-only skills.
+    """
+    skills = public_skill_service.get_skills(db, skip=skip, limit=limit)
+    if not include_admin_only:
+        skills = [s for s in skills if not s.get("isAdminOnly", False)]
+    return skills
 
 
 @router.post("/public", response_model=Dict[str, Any], status_code=201)
@@ -593,10 +607,66 @@ def delete_public_skill(
     return None
 
 
+@router.patch("/public/{skill_id}/visibility", response_model=Dict[str, Any])
+def update_public_skill_visibility(
+    skill_id: int,
+    is_admin_only: bool = Query(
+        ..., description="Whether this skill is only visible to admins"
+    ),
+    current_user: User = Depends(security.get_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update the visibility of a public skill (admin only).
+
+    This allows admins to toggle the isAdminOnly flag without re-uploading the skill package.
+    """
+    # Verify this is a public skill (user_id=0)
+    skill = (
+        db.query(Kind)
+        .filter(
+            Kind.id == skill_id,
+            Kind.user_id == 0,
+            Kind.kind == "Skill",
+            Kind.is_active == True,  # noqa: E712
+        )
+        .first()
+    )
+
+    if not skill:
+        raise HTTPException(status_code=404, detail="Public skill not found")
+
+    # Update the isAdminOnly flag in the skill spec
+    skill_json = skill.json
+    if not isinstance(skill_json, dict):
+        skill_json = {}
+    if "spec" not in skill_json:
+        skill_json["spec"] = {}
+
+    skill_json["spec"]["isAdminOnly"] = is_admin_only
+    skill.json = skill_json
+    flag_modified(skill, "json")
+
+    db.commit()
+    db.refresh(skill)
+
+    # Return the updated skill in dict format
+    return {
+        "id": skill.id,
+        "name": skill.name,
+        "namespace": skill.namespace,
+        "isAdminOnly": is_admin_only,
+        "message": f"Skill visibility updated to {'admin-only' if is_admin_only else 'public'}",
+    }
+
+
 @router.post("/public/upload", response_model=Dict[str, Any], status_code=201)
 async def upload_public_skill(
     file: UploadFile = File(..., description="Skill ZIP package (max 10MB)"),
     name: str = Form(..., description="Skill name (unique)"),
+    is_admin_only: bool = Form(
+        True, description="Whether this skill is only visible to admins (default: true)"
+    ),
     current_user: User = Depends(security.get_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -621,6 +691,9 @@ async def upload_public_skill(
     tags: ["tag1", "tag2"]
     ---
     ```
+
+    By default, uploaded public skills are only visible to admins (is_admin_only=true).
+    Set is_admin_only=false to make the skill visible to all users.
     """
     # Validate file type
     if not file.filename.endswith(".zip"):
@@ -637,6 +710,7 @@ async def upload_public_skill(
         file_content=file_content,
         file_name=file.filename,
         user_id=0,  # Public skill
+        is_admin_only=is_admin_only,
     )
 
     # Convert to dict format for consistency with other public skill endpoints
@@ -652,6 +726,7 @@ async def upload_public_skill(
         "bindShells": skill.spec.bindShells,
         "is_active": True,
         "is_public": True,
+        "isAdminOnly": skill.spec.isAdminOnly,
         "created_at": None,
         "updated_at": None,
     }
@@ -661,6 +736,10 @@ async def upload_public_skill(
 async def update_public_skill_with_upload(
     skill_id: int,
     file: UploadFile = File(..., description="New Skill ZIP package (max 10MB)"),
+    is_admin_only: Optional[bool] = Form(
+        None,
+        description="Whether this skill is only visible to admins (optional, preserves existing if not set)",
+    ),
     current_user: User = Depends(security.get_admin_user),
     db: Session = Depends(get_db),
 ):
@@ -677,6 +756,7 @@ async def update_public_skill_with_upload(
     ```
 
     The Skill name and namespace cannot be changed.
+    Optionally update the is_admin_only visibility flag.
     """
     # Verify this is a public skill (user_id=0)
     existing_skill = (
@@ -707,6 +787,7 @@ async def update_public_skill_with_upload(
         user_id=0,  # Public skill
         file_content=file_content,
         file_name=file.filename,
+        is_admin_only=is_admin_only,
     )
 
     # Convert to dict format for consistency with other public skill endpoints
@@ -722,6 +803,7 @@ async def update_public_skill_with_upload(
         "bindShells": skill.spec.bindShells,
         "is_active": True,
         "is_public": True,
+        "isAdminOnly": skill.spec.isAdminOnly,
         "created_at": None,
         "updated_at": None,
     }
@@ -1083,10 +1165,14 @@ def list_unified_skills(
                     "is_public": False,
                     "user_id": kind.user_id,
                     "source": source_info,
+                    "isAdminOnly": False,  # User/group skills are never admin-only
                     "created_at": kind.created_at,
                     "updated_at": kind.updated_at,
                 }
             )
+
+    # Check if current user is admin
+    is_admin = current_user.role == "admin"
 
     # Get public skills (user_id=0) - single query
     public_skill_kinds = (
@@ -1105,6 +1191,14 @@ def list_unified_skills(
     for kind in public_skill_kinds:
         if kind.name not in user_skill_names:
             spec = kind.json.get("spec", {})
+
+            # Check if skill is admin-only
+            is_admin_only = spec.get("isAdminOnly", False)
+
+            # Skip admin-only skills for non-admin users
+            if is_admin_only and not is_admin:
+                continue
+
             user_skills.append(
                 {
                     "id": kind.id,
@@ -1120,6 +1214,7 @@ def list_unified_skills(
                     "is_public": True,
                     "user_id": kind.user_id,
                     "source": None,
+                    "isAdminOnly": is_admin_only,
                     "created_at": kind.created_at,
                     "updated_at": kind.updated_at,
                 }

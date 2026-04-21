@@ -13,6 +13,8 @@ import {
   RefreshCwIcon,
   GitBranchIcon,
   Link2Icon,
+  EyeOffIcon,
+  EyeIcon,
 } from 'lucide-react'
 import LoadingState from '@/features/common/LoadingState'
 import {
@@ -27,6 +29,7 @@ import {
   removeSingleSkillReference,
   removeSkillReferences,
   updateSkillFromGit,
+  updatePublicSkillVisibility,
 } from '@/apis/skills'
 import SkillUploadModal from './SkillUploadModal'
 import { SkillReferenceConflictDialog } from './SkillReferenceConflictDialog'
@@ -75,6 +78,7 @@ export default function SkillManagementModal({
     'delete_conflict'
   )
   const [referencedGhosts, setReferencedGhosts] = useState<ReferencedGhost[]>([])
+  const [togglingVisibilityId, setTogglingVisibilityId] = useState<number | null>(null)
 
   // Determine the namespace for uploading skills
   const uploadNamespace = scope === 'group' && groupName ? groupName : 'default'
@@ -266,6 +270,35 @@ export default function SkillManagementModal({
     }
   }
 
+  const handleToggleVisibility = async (skill: UnifiedSkill) => {
+    if (!skill.is_public) return
+
+    setTogglingVisibilityId(skill.id)
+    try {
+      const newVisibility = !(skill.isAdminOnly ?? false)
+      await updatePublicSkillVisibility(skill.id, newVisibility)
+      toast({
+        title: t('common:common.success'),
+        description: t(
+          newVisibility ? 'common:skills.set_admin_only' : 'common:skills.set_public',
+          {
+            skillName: skill.name,
+          }
+        ),
+      })
+      await loadSkills()
+      onSkillsChange?.()
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: t('common:skills.failed_update_visibility'),
+        description: error instanceof Error ? error.message : t('common:common.unknown_error'),
+      })
+    } finally {
+      setTogglingVisibilityId(null)
+    }
+  }
+
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
@@ -337,6 +370,12 @@ export default function SkillManagementModal({
                                     {tag}
                                   </Tag>
                                 ))}
+                                {skill.is_public && skill.isAdminOnly && (
+                                  <Tag variant="warning" className="flex items-center gap-1">
+                                    <EyeOffIcon className="w-3 h-3" />
+                                    {t('common:skills.admin_only')}
+                                  </Tag>
+                                )}
                               </div>
 
                               {/* Bind Shells */}
@@ -395,6 +434,29 @@ export default function SkillManagementModal({
                                 <RefreshCwIcon
                                   className={`w-4 h-4 ${updatingFromGitId === skill.id ? 'animate-spin' : ''}`}
                                 />
+                              </Button>
+                            )}
+                            {/* Visibility toggle button - only for public skills in public scope */}
+                            {scope === 'public' && skill.is_public && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleToggleVisibility(skill)}
+                                disabled={togglingVisibilityId === skill.id}
+                                title={
+                                  skill.isAdminOnly
+                                    ? t('common:skills.make_public')
+                                    : t('common:skills.make_admin_only')
+                                }
+                              >
+                                {togglingVisibilityId === skill.id ? (
+                                  <RefreshCwIcon className="w-4 h-4 animate-spin" />
+                                ) : skill.isAdminOnly ? (
+                                  <EyeIcon className="w-4 h-4 text-warning" />
+                                ) : (
+                                  <EyeOffIcon className="w-4 h-4 text-success" />
+                                )}
                               </Button>
                             )}
                             <Button

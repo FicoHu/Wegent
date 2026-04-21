@@ -966,7 +966,15 @@
     "update_failed_count": "失败 {{count}} 个",
     "git_source": "Git 来源",
     "namespace": "命名空间",
-    "batch_updating": "正在批量更新..."
+    "batch_updating": "正在批量更新...",
+    "admin_only": "仅管理员可见",
+    "admin_only_label": "仅管理员可见",
+    "admin_only_description": "勾选后，此技能将仅在系统管理页面中可见，普通用户无法查看",
+    "make_admin_only": "设为仅管理员可见",
+    "make_public": "设为公开",
+    "set_admin_only": "技能 \"{{skillName}}\" 已设为仅管理员可见",
+    "set_public": "技能 \"{{skillName}}\" 已设为公开",
+    "failed_update_visibility": "更新技能可见性失败"
   },
   "models": {
     "label": "模型",

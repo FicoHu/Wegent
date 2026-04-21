@@ -216,6 +216,7 @@ class SkillKindsService:
         file_name: str,
         user_id: int,
         source: Optional[Dict[str, Any]] = None,
+        is_admin_only: bool = False,
     ) -> Skill:
         """
         Create a new Skill with ZIP package.
@@ -231,6 +232,7 @@ class SkillKindsService:
             file_name: Original file name
             user_id: User ID
             source: Optional source information (for git-imported skills)
+            is_admin_only: Whether this skill is only visible to admins (default: False)
 
         Returns:
             Created Skill CRD
@@ -307,6 +309,7 @@ class SkillKindsService:
                 "mcpServers": metadata.get("mcpServers"),
                 "preload": metadata.get("preload", False),
                 "source": source,
+                "isAdminOnly": is_admin_only if user_id == 0 else False,
             },
             "status": {
                 "state": "Available",
@@ -550,6 +553,7 @@ class SkillKindsService:
         file_content: bytes,
         file_name: str,
         source: Optional[Dict[str, Any]] = None,
+        is_admin_only: Optional[bool] = None,
     ) -> Skill:
         """
         Update Skill ZIP package.
@@ -561,6 +565,7 @@ class SkillKindsService:
             file_content: New ZIP file content
             file_name: New file name
             source: Optional source information (for git-imported skills)
+            is_admin_only: Optional visibility flag (only for public skills, user_id=0)
 
         Returns:
             Updated Skill CRD
@@ -606,6 +611,9 @@ class SkillKindsService:
         # Update source if provided (for git-imported skills)
         if source is not None:
             skill_json["spec"]["source"] = source
+        # Update isAdminOnly if provided (only for public skills)
+        if is_admin_only is not None and user_id == 0:
+            skill_json["spec"]["isAdminOnly"] = is_admin_only
         skill_json["status"].update(
             {"fileSize": metadata["file_size"], "fileHash": metadata["file_hash"]}
         )
