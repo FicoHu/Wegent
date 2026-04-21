@@ -31,9 +31,7 @@ REPO_UPDATE_LOCK_KEY_INTERVAL = settings.REPO_UPDATE_INTERVAL_SECONDS - 10
 if REPO_UPDATE_LOCK_KEY_INTERVAL < 10:
     REPO_UPDATE_LOCK_KEY_INTERVAL = 10
 
-# Redis lock keys for unread notification jobs
-HOURLY_NOTIFICATION_LOCK_KEY = "hourly_notification_lock"
-DAILY_NOTIFICATION_LOCK_KEY = "daily_notification_lock"
+# Redis lock keys for background jobs
 EXECUTOR_CLEANUP_LOCK_KEY = "executor_cleanup_lock"
 
 
