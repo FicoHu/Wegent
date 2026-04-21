@@ -33,7 +33,7 @@ def mock_executor_cleanup_cursor_cache(mocker):
         "app.services.executor_cleanup_cursor_service.cache_manager"
     )
     mock_cache.get_sync.return_value = None
-    mock_cache.set_sync.return_value = True
+    mock_cache.set_from_sync.return_value = True
     return mock_cache
 
 

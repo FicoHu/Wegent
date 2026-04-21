@@ -104,7 +104,7 @@ class TestExecutorCleanupProgress:
                 "last_scanned_subtask_id": 123,
                 "updated_at": datetime.now().isoformat(),
             }
-            mock_cache.set_sync.return_value = True
+            mock_cache.set_from_sync.return_value = True
 
             job_service.cleanup_stale_executors(test_db)
 
@@ -158,12 +158,12 @@ class TestExecutorCleanupProgress:
             "app.services.executor_cleanup_cursor_service.cache_manager"
         ) as mock_cache:
             mock_cache.get_sync.return_value = None
-            mock_cache.set_sync.return_value = True
+            mock_cache.set_from_sync.return_value = True
 
             cursor = executor_cleanup_cursor_service.get_cursor(test_db)
 
         assert cursor.last_scanned_subtask_id == recent_subtask.id - 1
-        assert mock_cache.set_sync.call_args.args[0] == "executor_cleanup_cursor"
+        assert mock_cache.set_from_sync.call_args.args[0] == "executor_cleanup_cursor"
 
     def test_advance_cursor_writes_value_to_redis(self, test_db):
         """Test advancing the cursor stores the latest value in Redis."""
@@ -177,9 +177,11 @@ class TestExecutorCleanupProgress:
                 last_scanned_subtask_id=321,
             )
 
-        mock_cache.set_sync.assert_called_once()
-        assert mock_cache.set_sync.call_args.args[0] == "executor_cleanup_cursor"
-        assert mock_cache.set_sync.call_args.args[1]["last_scanned_subtask_id"] == 321
+        mock_cache.set_from_sync.assert_called_once()
+        assert mock_cache.set_from_sync.call_args.args[0] == "executor_cleanup_cursor"
+        assert (
+            mock_cache.set_from_sync.call_args.args[1]["last_scanned_subtask_id"] == 321
+        )
 
     def test_cleanup_keeps_cursor_position_when_primary_scan_reaches_tail(
         self, job_service, test_db
@@ -206,11 +208,11 @@ class TestExecutorCleanupProgress:
                 "last_scanned_subtask_id": 456,
                 "updated_at": datetime.now().isoformat(),
             }
-            mock_cache.set_sync.return_value = True
+            mock_cache.set_from_sync.return_value = True
 
             job_service.cleanup_stale_executors(test_db)
 
-        mock_cache.set_sync.assert_not_called()
+        mock_cache.set_from_sync.assert_not_called()
 
     def test_cleanup_uses_lookback_scan_when_primary_scan_is_empty(
         self, job_service, test_db
@@ -253,7 +255,7 @@ class TestExecutorCleanupProgress:
                 "last_scanned_subtask_id": 123,
                 "updated_at": datetime.now().isoformat(),
             }
-            mock_cache.set_sync.return_value = True
+            mock_cache.set_from_sync.return_value = True
             mock_executor_service.delete_executor_task_sync.return_value = {
                 "status": "success"
             }
@@ -366,7 +368,7 @@ class TestExecutorCleanupProgress:
                 "last_scanned_subtask_id": 123,
                 "updated_at": datetime.now().isoformat(),
             }
-            mock_cache.set_sync.return_value = True
+            mock_cache.set_from_sync.return_value = True
 
             job_service.cleanup_stale_executors(test_db)
 

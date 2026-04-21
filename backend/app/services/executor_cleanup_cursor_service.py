@@ -81,7 +81,7 @@ class ExecutorCleanupCursorService:
 
     def _write_cursor_to_redis(self, last_scanned_subtask_id: int) -> None:
         """Persist the cleanup cursor to Redis without expiration."""
-        cache_manager.set_sync(
+        cache_manager.set_from_sync(
             EXECUTOR_CLEANUP_CURSOR_KEY,
             {
                 "last_scanned_subtask_id": max(last_scanned_subtask_id, 0),
