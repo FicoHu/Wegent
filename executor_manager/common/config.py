@@ -66,7 +66,8 @@ class TimeoutConfig:
     http_execution_request: float = 30.0
     http_container_wait: float = 5.0
 
-    # Redis TTL
+    # Redis data retention window for sandbox state
+    # This is not the sandbox execution timeout; sandbox expiry uses expires_at.
     redis_ttl: int = 86400  # 24 hours
     # Session hash TTL must be longer than redis_ttl to ensure GC can load sandbox data
     # Formula: redis_ttl + GC_INTERVAL + buffer (default: 86400 + 3600 + 3600 = 93600)
