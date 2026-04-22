@@ -977,9 +977,8 @@ class SandboxManager(metaclass=SingletonMeta):
     async def _collect_expired_sandboxes(self) -> None:
         """Terminate expired sandboxes.
 
-        Scans active sandboxes and terminates those whose expires_at timestamp
-        has passed. This matches the sandbox API contract, which exposes
-        expires_at as the lifecycle timeout source of truth.
+        Scans active sandboxes and terminates those that have been idle longer
+        than the configured inactivity timeout.
         """
         lock = get_distributed_lock()
         if not lock.acquire("sandbox_gc", expire_seconds=300):
@@ -995,6 +994,8 @@ class SandboxManager(metaclass=SingletonMeta):
                 logger.info("[SandboxManager] No active sandboxes found")
                 return
 
+            now = time.time()
+            inactivity_timeout = self._config.timeout.sandbox_inactive_timeout
             expired_task_ids = []
             for task_id_str in active_task_ids:
                 sandbox = self._repository.load_sandbox(task_id_str)
@@ -1005,7 +1006,8 @@ class SandboxManager(metaclass=SingletonMeta):
                     )
                     continue
 
-                if sandbox.is_expired():
+                idle_seconds = now - sandbox.last_activity_at
+                if idle_seconds >= inactivity_timeout:
                     expired_task_ids.append(task_id_str)
 
             if not expired_task_ids:

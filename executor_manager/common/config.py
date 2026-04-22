@@ -47,6 +47,9 @@ class TimeoutConfig:
 
     # Sandbox timeouts
     sandbox_default: int = 1800  # 30 minutes
+    sandbox_inactive_timeout: int = field(
+        default_factory=lambda: int(os.getenv("SANDBOX_INACTIVE_TIMEOUT", "7200"))
+    )
     execution_default: int = 600  # 10 minutes
     container_ready: int = field(
         default_factory=lambda: int(os.getenv("CONTAINER_READY_TIMEOUT", "20"))

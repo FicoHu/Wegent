@@ -17,7 +17,7 @@ Redis Data Structure:
 
 GC Design:
 - GC runs every GC_INTERVAL (default 3600s) to clean up expired sandboxes
-- Sandbox expiration is determined by sandbox.expires_at in SandboxManager
+- Sandbox expiration is determined by sandbox.last_activity_at in SandboxManager
 - Session hash has TTL = session_hash_ttl = redis_ttl + GC_INTERVAL + buffer
 - This ensures GC can still load sandbox data long enough to terminate expired sandboxes
 """

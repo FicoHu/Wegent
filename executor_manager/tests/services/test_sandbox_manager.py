@@ -994,10 +994,11 @@ class TestSandboxManager:
         mocker,
         sample_sandbox,
     ):
-        """Test terminates active sandboxes whose expires_at has passed."""
+        """Test terminates sandboxes idle for more than two hours."""
         manager = sandbox_manager_with_mock_redis
         mock_redis_client.zrange.return_value = ["12345"]
-        sample_sandbox.expires_at = time.time() - 60
+        sample_sandbox.last_activity_at = time.time() - (2 * 3600) - 60
+        sample_sandbox.expires_at = time.time() + 3600
 
         # Mock repository.load_sandbox to return a sandbox
         mocker.patch.object(
@@ -1039,10 +1040,11 @@ class TestSandboxManager:
         mocker,
         sample_sandbox,
     ):
-        """Test does not terminate active sandboxes before expires_at."""
+        """Test keeps sandboxes with recent activity even if expires_at is in the past."""
         manager = sandbox_manager_with_mock_redis
         mock_redis_client.zrange.return_value = ["12345"]
-        sample_sandbox.expires_at = time.time() + 300
+        sample_sandbox.last_activity_at = time.time() - 300
+        sample_sandbox.expires_at = time.time() - 60
 
         mocker.patch.object(
             manager._repository, "load_sandbox", return_value=sample_sandbox
