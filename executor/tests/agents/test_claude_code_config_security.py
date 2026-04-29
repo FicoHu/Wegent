@@ -55,8 +55,21 @@ class TestSaveClaudeConfigFiles:
                 "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
                 "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022",
             },
-            "allowedTools": [],
-            "model": "claude-3-5-sonnet-20241022",
+            "hooks": {
+                "Stop": [
+                    {
+                        "matcher": "",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "node /app/hooks/action.js",
+                            }
+                        ],
+                    }
+                ]
+            },
+            "statusLine": {"type": "command", "command": "echo Wegent"},
+            "includeCoAuthoredBy": True,
         }
 
     @pytest.fixture
@@ -72,14 +85,14 @@ class TestSaveClaudeConfigFiles:
         mock_emitter = create_mock_emitter()
         return ClaudeCodeAgent(task_data, mock_emitter)
 
-    def test_local_mode_does_not_write_settings_json(
+    def test_local_mode_writes_sanitized_settings_json(
         self, task_data, agent_config_with_sensitive_data, temp_workspace
     ):
         """
-        Test that Local mode does NOT write settings.json containing sensitive data.
+        Test that Local mode writes settings.json without sensitive data.
 
-        In Local mode, settings.json should not be created because it contains
-        sensitive information like ANTHROPIC_AUTH_TOKEN.
+        In Local mode, settings.json supports Claude Code settings such as
+        hooks and statusLine, but sensitive env values must remain in memory.
         """
         with (
             patch("executor.config.config.EXECUTOR_MODE", "local"),
@@ -90,13 +103,23 @@ class TestSaveClaudeConfigFiles:
             agent = self._create_agent(task_data)
             agent._save_claude_config_files(agent_config_with_sensitive_data)
 
-            # Verify settings.json was NOT created
+            # Verify settings.json was created without sensitive env values
             settings_path = os.path.join(
                 temp_workspace, str(task_data.task_id), ".claude", "settings.json"
             )
-            assert not os.path.exists(
+            assert os.path.exists(
                 settings_path
-            ), f"settings.json should NOT exist in Local mode: {settings_path}"
+            ), f"settings.json should exist in Local mode: {settings_path}"
+
+            with open(settings_path) as f:
+                settings = json.load(f)
+
+            assert settings == {
+                "hooks": agent_config_with_sensitive_data["hooks"],
+                "statusLine": agent_config_with_sensitive_data["statusLine"],
+                "includeCoAuthoredBy": True,
+            }
+            assert "env" not in settings
 
     def test_local_mode_writes_claude_json(
         self, task_data, agent_config_with_sensitive_data, temp_workspace
