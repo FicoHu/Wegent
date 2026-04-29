@@ -112,6 +112,7 @@ class PublicSkillUpdate(BaseModel):
     version: Optional[str] = None
     author: Optional[str] = None
     tags: Optional[List[str]] = None
+    visible: Optional[bool] = None
 
     @field_validator("version", mode="before")
     @classmethod
@@ -579,6 +580,7 @@ def update_public_skill(
         version=skill_in.version,
         author=skill_in.author,
         tags=skill_in.tags,
+        visible=skill_in.visible,
     )
 
 
@@ -1105,6 +1107,9 @@ def list_unified_skills(
     for kind in public_skill_kinds:
         if kind.name not in user_skill_names:
             spec = kind.json.get("spec", {})
+            # Skip hidden skills (visible=False)
+            if spec.get("visible", True) is False:
+                continue
             user_skills.append(
                 {
                     "id": kind.id,

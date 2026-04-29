@@ -18,6 +18,7 @@ import {
   TrashIcon,
   ArrowDownTrayIcon,
   EyeIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline'
 import { Loader2, UploadIcon, FileIcon, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -44,11 +45,13 @@ import {
   fetchPublicSkillsList,
   uploadPublicSkill,
   updatePublicSkillWithUpload,
+  updatePublicSkill,
   deletePublicSkill,
   downloadPublicSkill,
   getPublicSkillContent,
   UnifiedSkill,
 } from '@/apis/skills'
+import { Switch } from '@/components/ui/switch'
 import UnifiedAddButton from '@/components/common/UnifiedAddButton'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -63,6 +66,7 @@ const PublicSkillList: React.FC = () => {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isViewContentDialogOpen, setIsViewContentDialogOpen] = useState(false)
+  const [isMetadataDialogOpen, setIsMetadataDialogOpen] = useState(false)
   const [selectedSkill, setSelectedSkill] = useState<UnifiedSkill | null>(null)
   const [skillContent, setSkillContent] = useState<string>('')
   const [loadingContent, setLoadingContent] = useState(false)
@@ -75,6 +79,16 @@ const PublicSkillList: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+
+  // Metadata edit form states
+  const [metadataForm, setMetadataForm] = useState({
+    description: '',
+    version: '',
+    author: '',
+    tags: '',
+    visible: true,
+  })
+  const [updatingMetadata, setUpdatingMetadata] = useState(false)
 
   const fetchSkills = useCallback(async () => {
     setLoading(true)
@@ -269,6 +283,47 @@ const PublicSkillList: React.FC = () => {
     setIsUploadDialogOpen(true)
   }
 
+  const openMetadataDialog = (skill: UnifiedSkill) => {
+    setSelectedSkill(skill)
+    setMetadataForm({
+      description: skill.description || '',
+      version: skill.version || '',
+      author: skill.author || '',
+      tags: skill.tags?.join(', ') || '',
+      visible: skill.visible !== false, // default to true if undefined
+    })
+    setIsMetadataDialogOpen(true)
+  }
+
+  const handleUpdateMetadata = async () => {
+    if (!selectedSkill) return
+
+    setUpdatingMetadata(true)
+    try {
+      await updatePublicSkill(selectedSkill.id, {
+        description: metadataForm.description,
+        version: metadataForm.version,
+        author: metadataForm.author,
+        tags: metadataForm.tags
+          .split(',')
+          .map(t => t.trim())
+          .filter(Boolean),
+        visible: metadataForm.visible,
+      })
+      toast({ title: t('public_skills.success.metadata_updated') })
+      setIsMetadataDialogOpen(false)
+      fetchSkills()
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: t('public_skills.errors.metadata_update_failed'),
+        description: (err as Error).message,
+      })
+    } finally {
+      setUpdatingMetadata(false)
+    }
+  }
+
   const handleCloseUploadDialog = () => {
     if (!uploading) {
       setIsUploadDialogOpen(false)
@@ -323,6 +378,9 @@ const PublicSkillList: React.FC = () => {
                           {skill.displayName || skill.name}
                         </h3>
                         {skill.version && <Tag variant="info">v{skill.version}</Tag>}
+                        {skill.visible === false && (
+                          <Tag variant="warning">{t('public_skills.hidden')}</Tag>
+                        )}
                         {skill.tags?.map(tag => (
                           <Tag key={tag} variant="default">
                             {tag}
@@ -359,6 +417,15 @@ const PublicSkillList: React.FC = () => {
                       title={t('public_skills.view_content')}
                     >
                       <EyeIcon className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => openMetadataDialog(skill)}
+                      title={t('public_skills.edit_metadata')}
+                    >
+                      <Cog6ToothIcon className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -420,19 +487,19 @@ const PublicSkillList: React.FC = () => {
               {isEditMode
                 ? `Update the ZIP package for skill "${selectedSkill?.displayName || selectedSkill?.name}"`
                 : 'Upload a new public skill ZIP package'}
-              <div className="mt-2 text-xs text-text-muted">
-                <strong>Expected structure:</strong>
-                <div className="font-mono bg-muted p-2 rounded mt-1">
-                  my-skill.zip
-                  <br />
-                  └── my-skill/
-                  <br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;├── SKILL.md
-                  <br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;└── resources/
-                </div>
-              </div>
             </DialogDescription>
+            <div className="mt-2 text-xs text-text-muted">
+              <strong>Expected structure:</strong>
+              <div className="font-mono bg-muted p-2 rounded mt-1">
+                my-skill.zip
+                <br />
+                └── my-skill/
+                <br />
+                &nbsp;&nbsp;&nbsp;&nbsp;├── SKILL.md
+                <br />
+                &nbsp;&nbsp;&nbsp;&nbsp;└── resources/
+              </div>
+            </div>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {/* Skill Name Input (only for create mode) */}
@@ -602,6 +669,106 @@ const PublicSkillList: React.FC = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsViewContentDialogOpen(false)}>
               {t('common.cancel')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Metadata Dialog */}
+      <Dialog open={isMetadataDialogOpen} onOpenChange={setIsMetadataDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] bg-surface">
+          <DialogHeader>
+            <DialogTitle>{t('public_skills.edit_metadata_title')}</DialogTitle>
+            <DialogDescription>
+              {t('public_skills.edit_metadata_description', {
+                name: selectedSkill?.displayName || selectedSkill?.name,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Description */}
+            <div className="space-y-2">
+              <Label htmlFor="skill-description">{t('public_skills.fields.description')}</Label>
+              <Input
+                id="skill-description"
+                placeholder={t('public_skills.placeholders.description')}
+                value={metadataForm.description}
+                onChange={e => setMetadataForm({ ...metadataForm, description: e.target.value })}
+                disabled={updatingMetadata}
+              />
+            </div>
+
+            {/* Version */}
+            <div className="space-y-2">
+              <Label htmlFor="skill-version">{t('public_skills.fields.version')}</Label>
+              <Input
+                id="skill-version"
+                placeholder={t('public_skills.placeholders.version')}
+                value={metadataForm.version}
+                onChange={e => setMetadataForm({ ...metadataForm, version: e.target.value })}
+                disabled={updatingMetadata}
+              />
+            </div>
+
+            {/* Author */}
+            <div className="space-y-2">
+              <Label htmlFor="skill-author">{t('public_skills.fields.author')}</Label>
+              <Input
+                id="skill-author"
+                placeholder={t('public_skills.placeholders.author')}
+                value={metadataForm.author}
+                onChange={e => setMetadataForm({ ...metadataForm, author: e.target.value })}
+                disabled={updatingMetadata}
+              />
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-2">
+              <Label htmlFor="skill-tags">{t('public_skills.fields.tags')}</Label>
+              <Input
+                id="skill-tags"
+                placeholder={t('public_skills.placeholders.tags')}
+                value={metadataForm.tags}
+                onChange={e => setMetadataForm({ ...metadataForm, tags: e.target.value })}
+                disabled={updatingMetadata}
+              />
+              <p className="text-xs text-text-muted">{t('public_skills.hints.tags')}</p>
+            </div>
+
+            {/* Visible Toggle */}
+            <div className="flex items-center justify-between space-y-0 rounded-lg border border-border p-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="skill-visible" className="text-base">
+                  {t('public_skills.fields.visible')}
+                </Label>
+                <p className="text-xs text-text-muted">{t('public_skills.hints.visible')}</p>
+              </div>
+              <Switch
+                id="skill-visible"
+                checked={metadataForm.visible}
+                onCheckedChange={checked => setMetadataForm({ ...metadataForm, visible: checked })}
+                disabled={updatingMetadata}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsMetadataDialogOpen(false)}
+              disabled={updatingMetadata}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button variant="primary" onClick={handleUpdateMetadata} disabled={updatingMetadata}>
+              {updatingMetadata ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t('common.saving')}
+                </>
+              ) : (
+                t('common.save')
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

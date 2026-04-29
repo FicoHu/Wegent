@@ -36,6 +36,7 @@ class PublicSkillAdapter:
             "author": spec.get("author"),
             "tags": spec.get("tags"),
             "bindShells": spec.get("bindShells"),
+            "visible": spec.get("visible", True),
             "is_active": kind.is_active,
             "is_public": True,
             "user_id": kind.user_id,
@@ -171,6 +172,7 @@ class PublicSkillService:
         version: Optional[str] = None,
         author: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        visible: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Update a public skill"""
         skill = (
@@ -198,6 +200,8 @@ class PublicSkillService:
             skill_json["spec"]["author"] = author
         if tags is not None:
             skill_json["spec"]["tags"] = tags
+        if visible is not None:
+            skill_json["spec"]["visible"] = visible
 
         skill.json = skill_json
         db.commit()
