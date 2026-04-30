@@ -7,7 +7,6 @@ const path = require('path')
 
 // Check if running with Turbopack (development mode with --turbopack flag)
 const isTurbopack = process.env.TURBOPACK === '1'
-const isDevelopment = process.env.NODE_ENV !== 'production'
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -16,9 +15,6 @@ const nextConfig = {
   // Allow cross-origin requests in development mode
   // This prevents "Cross origin request detected" warning
   allowedDevOrigins: ['localhost:3000', '10.37.254.194'],
-  turbopack: {
-    root: __dirname,
-  },
   // Transpile node_modules that ship modern JS syntax for iOS 16 Safari compatibility
   transpilePackages: [
     'mermaid',
@@ -156,7 +152,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: isDevelopment ? 'no-store, max-age=0' : 'public, max-age=31536000, immutable',
+            value: 'public, max-age=31536000, immutable',
           },
         ],
       },
