@@ -156,6 +156,7 @@ class UnifiedSkillResponse(BaseModel):
     author: Optional[str] = None
     tags: Optional[List[str]] = None
     bindShells: Optional[List[str]] = None  # Shell types this skill is compatible with
+    visible: bool = True
     is_active: bool
     is_public: bool
     user_id: int  # ID of the user who uploaded this skill
@@ -1081,6 +1082,7 @@ def list_unified_skills(
                     "author": spec.get("author"),
                     "tags": spec.get("tags"),
                     "bindShells": spec.get("bindShells"),
+                    "visible": spec.get("visible", True),
                     "is_active": True,
                     "is_public": False,
                     "user_id": kind.user_id,
@@ -1107,9 +1109,6 @@ def list_unified_skills(
     for kind in public_skill_kinds:
         if kind.name not in user_skill_names:
             spec = kind.json.get("spec", {})
-            # Skip hidden skills (visible=False)
-            if spec.get("visible", True) is False:
-                continue
             user_skills.append(
                 {
                     "id": kind.id,
@@ -1121,6 +1120,7 @@ def list_unified_skills(
                     "author": spec.get("author"),
                     "tags": spec.get("tags"),
                     "bindShells": spec.get("bindShells"),
+                    "visible": spec.get("visible", True),
                     "is_active": True,
                     "is_public": True,
                     "user_id": kind.user_id,
