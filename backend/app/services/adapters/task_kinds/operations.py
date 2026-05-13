@@ -49,6 +49,7 @@ class TaskOperationsMixin:
         obj_in: TaskCreate,
         user: User,
         task_id: Optional[int] = None,
+        project_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Create user Task using kinds table.
@@ -85,7 +86,7 @@ class TaskOperationsMixin:
                 db, existing_task, obj_in, user, task_id
             )
         else:
-            task, team = self._create_new_task(db, obj_in, user, task_id)
+            task, team = self._create_new_task(db, obj_in, user, task_id, project_id=project_id)
 
         # Create subtasks for the task
         create_subtasks(db, task, team, user.id, obj_in.prompt)
@@ -199,8 +200,32 @@ class TaskOperationsMixin:
         obj_in: TaskCreate,
         user: User,
         task_id: int,
+        project_id: Optional[int] = None,
     ) -> tuple:
         """Create a new task."""
+        project = None
+        workspace_name = f"workspace-{task_id}"
+
+        # If project_id is provided, load project and use its workspace
+        if project_id:
+            from app.models.agent_project import AgentProject
+
+            project = (
+                db.query(AgentProject)
+                .filter(
+                    AgentProject.id == project_id,
+                    AgentProject.user_id == user.id,
+                    AgentProject.is_active == True,
+                )
+                .first()
+            )
+            if project:
+                workspace_name = project.workspace_ref["name"]
+                # Override team from project if not explicitly provided
+                if not obj_in.team_id and not (obj_in.team_name and obj_in.team_namespace):
+                    obj_in.team_name = project.team_ref["name"]
+                    obj_in.team_namespace = project.team_ref["namespace"]
+
         # Validate team exists
         team = self._get_team_for_new_task(db, obj_in, user)
 
@@ -224,33 +249,33 @@ class TaskOperationsMixin:
             if len(obj_in.prompt) > 50:
                 title += "..."
 
-        # Create Workspace
-        workspace_name = f"workspace-{task_id}"
-        workspace_json = {
-            "kind": "Workspace",
-            "spec": {
-                "repository": {
-                    "gitUrl": obj_in.git_url,
-                    "gitRepo": obj_in.git_repo,
-                    "gitRepoId": obj_in.git_repo_id,
-                    "gitDomain": obj_in.git_domain,
-                    "branchName": obj_in.branch_name,
-                }
-            },
-            "status": {"state": "Available"},
-            "metadata": {"name": workspace_name, "namespace": "default"},
-            "apiVersion": "agent.wecode.io/v1",
-        }
+        # Create Workspace only when not using a project workspace
+        if not project_id:
+            workspace_json = {
+                "kind": "Workspace",
+                "spec": {
+                    "repository": {
+                        "gitUrl": obj_in.git_url,
+                        "gitRepo": obj_in.git_repo,
+                        "gitRepoId": obj_in.git_repo_id,
+                        "gitDomain": obj_in.git_domain,
+                        "branchName": obj_in.branch_name,
+                    }
+                },
+                "status": {"state": "Available"},
+                "metadata": {"name": workspace_name, "namespace": "default"},
+                "apiVersion": "agent.wecode.io/v1",
+            }
 
-        workspace = TaskResource(
-            user_id=user.id,
-            kind="Workspace",
-            name=workspace_name,
-            namespace="default",
-            json=workspace_json,
-            is_active=True,
-        )
-        db.add(workspace)
+            workspace = TaskResource(
+                user_id=user.id,
+                kind="Workspace",
+                name=workspace_name,
+                namespace="default",
+                json=workspace_json,
+                is_active=True,
+            )
+            db.add(workspace)
 
         task_json = {
             "kind": "Task",
@@ -299,6 +324,11 @@ class TaskOperationsMixin:
                     **(
                         {"api_key_name": obj_in.api_key_name}
                         if obj_in.api_key_name
+                        else {}
+                    ),
+                    **(
+                        {"projectId": str(project_id)}
+                        if project_id
                         else {}
                     ),
                     **(build_task_skill_labels(obj_in.additional_skills)),

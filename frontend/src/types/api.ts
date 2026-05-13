@@ -744,3 +744,54 @@ export interface ProjectListResponse {
   total: number
   items: ProjectWithTasks[]
 }
+
+// AgentProject Types
+/** Team reference */
+export interface TeamRef {
+  name: string
+  namespace: string
+  user_id: number
+}
+
+/** Workspace reference */
+export interface WorkspaceRef {
+  name: string
+  namespace: string
+}
+
+/** Task within an agent project */
+export interface AgentProjectTask {
+  task_id: number
+  task_title: string
+  task_status: TaskStatus
+  created_at: string
+}
+
+/** Agent project for development projects */
+export interface AgentProject {
+  id: number
+  user_id: number
+  name: string
+  description: string
+  environment_type: string
+  team_ref: TeamRef
+  workspace_ref: WorkspaceRef
+  directory_path: string | null
+  git_url: string | null
+  git_repo: string | null
+  git_branch: string | null
+  device_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Agent project with its tasks */
+export interface AgentProjectWithTasks extends AgentProject {
+  tasks: AgentProjectTask[]
+}
+
+/** Agent project list response */
+export interface AgentProjectListResponse {
+  total: number
+  items: AgentProjectWithTasks[]
+}

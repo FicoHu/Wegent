@@ -4,6 +4,7 @@
 
 # coding: utf-8
 import os
+from typing import Optional
 
 from executor.config.config_loader import load_custom_config
 
@@ -124,6 +125,25 @@ def get_workspace_root() -> str:
     if EXECUTOR_MODE == "local":
         return LOCAL_WORKSPACE_ROOT
     return WORKSPACE_ROOT
+
+
+def get_task_workspace_path(task_id: int, project_id: Optional[int] = None) -> str:
+    """Get the workspace path for a task.
+
+    When project_id is provided, the task shares the project's workspace directory.
+    Otherwise, the task gets its own isolated workspace directory.
+
+    Args:
+        task_id: The task ID
+        project_id: Optional agent project ID for project-scoped tasks
+
+    Returns:
+        Workspace path for the task
+    """
+    workspace_root = get_workspace_root()
+    if project_id is not None:
+        return os.path.join(workspace_root, "projects", str(project_id))
+    return os.path.join(workspace_root, str(task_id))
 
 
 # Local mode logging configuration

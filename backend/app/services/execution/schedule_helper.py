@@ -219,12 +219,30 @@ async def _dispatch_task_async(task_id: int) -> None:
                         db.commit()
                         continue
 
+                # Extract device_id from project if task belongs to an agent project
+                device_id = None
+                project_id = request.project_id
+                if project_id:
+                    from app.models.agent_project import AgentProject
+
+                    project = (
+                        db.query(AgentProject)
+                        .filter(
+                            AgentProject.id == project_id,
+                            AgentProject.user_id == task.user_id,
+                            AgentProject.is_active == True,
+                        )
+                        .first()
+                    )
+                    if project and project.device_id:
+                        device_id = project.device_id
+
                 # Update subtask status to RUNNING
                 subtask.status = SubtaskStatus.RUNNING
                 db.commit()
 
                 # Dispatch using HTTP+Callback mode
-                await execution_dispatcher.dispatch(request)
+                await execution_dispatcher.dispatch(request, device_id=device_id)
 
                 logger.info(
                     f"[schedule_dispatch] Dispatched subtask {subtask.id} "
