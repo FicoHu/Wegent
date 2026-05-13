@@ -11,6 +11,7 @@ Models with relationships should be imported after their related models.
 The legacy SharedTask, SharedTeam, and TaskMember models have been removed.
 Use ResourceMember for all resource sharing functionality.
 """
+from app.models.agent_project import AgentProject
 from app.models.api_key import APIKey
 from app.models.dingtalk_doc import DingtalkSyncedNode
 from app.models.kind import Kind
@@ -47,6 +48,7 @@ from app.models.work_queue import (
 from app.schemas.namespace import GroupRole
 
 __all__ = [
+    "AgentProject",
     "DingtalkSyncedNode",
     "User",
     "Kind",

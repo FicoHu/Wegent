@@ -29,6 +29,7 @@ async function loadTranslations() {
     'promptTune',
     'feed',
     'projects',
+    'agent-projects',
     'pet',
     'devices',
     'inbox',

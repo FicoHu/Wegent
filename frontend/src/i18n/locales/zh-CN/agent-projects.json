@@ -1,0 +1,60 @@
+{
+  "section": {
+    "title": "项目",
+    "empty": "暂无项目，点击 + 创建",
+    "noTasks": "暂无对话"
+  },
+  "actions": {
+    "edit": "编辑",
+    "delete": "删除"
+  },
+  "create": {
+    "title": "新建项目",
+    "description": "创建一个带有执行环境的开发项目"
+  },
+  "createTask": {
+    "title": "新建对话"
+  },
+  "edit": {
+    "title": "编辑项目",
+    "description": "修改项目信息（仅对新对话生效）"
+  },
+  "delete": {
+    "title": "删除项目",
+    "description": "确定要删除项目「{{name}}」吗？项目下的对话不会被删除。"
+  },
+  "form": {
+    "name": "项目名称",
+    "namePlaceholder": "输入项目名称",
+    "description": "项目描述（可选）",
+    "descriptionPlaceholder": "输入项目描述",
+    "environment": "执行环境",
+    "env": {
+      "cloudDocker": "编码云端",
+      "localDevice": "本地设备",
+      "cloudDevice": "云端设备"
+    },
+    "team": "智能体",
+    "teamPlaceholder": "选择智能体",
+    "device": "设备",
+    "devicePlaceholder": "选择设备",
+    "directory": "工作目录（可选）",
+    "directoryPlaceholder": "输入工作目录路径",
+    "gitUrl": "Git 仓库 URL（可选）",
+    "gitUrlPlaceholder": "https://github.com/user/repo.git",
+    "gitRepo": "仓库名称",
+    "gitRepoPlaceholder": "repo",
+    "gitBranch": "分支",
+    "gitBranchPlaceholder": "main"
+  },
+  "toast": {
+    "createSuccess": "项目创建成功",
+    "createSuccessDesc": "项目「{{name}}」已创建",
+    "createFailed": "创建项目失败",
+    "updateSuccess": "项目更新成功",
+    "updateFailed": "更新项目失败",
+    "deleteSuccess": "项目删除成功",
+    "deleteFailed": "删除项目失败",
+    "createTaskFailed": "创建对话失败"
+  }
+}

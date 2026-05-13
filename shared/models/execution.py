@@ -63,6 +63,7 @@ class ExecutionRequest:
     team_namespace: Optional[str] = None  # From Task: Team namespace for skill lookup
     subtask_title: Optional[str] = None  # From Task
     task_title: Optional[str] = None  # From Task
+    project_id: Optional[int] = None  # Agent project ID for project-scoped tasks
 
     # === User Information ===
     # {id, name, git_domain, git_token, git_id, git_login, git_email, user_name}

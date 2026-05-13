@@ -858,7 +858,8 @@ class ClaudeCodeAgent(Agent):
 
         # Ensure working directory exists
         if self.options.get("cwd") is None or self.options.get("cwd") == "":
-            cwd = os.path.join(config.get_workspace_root(), str(self.task_id))
+            project_id = getattr(self.task_data, "project_id", None)
+            cwd = config.get_task_workspace_path(self.task_id, project_id)
             os.makedirs(cwd, exist_ok=True)
             self.options["cwd"] = cwd
 

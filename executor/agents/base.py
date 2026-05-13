@@ -297,6 +297,7 @@ class Agent:
     async def download_code(self):
         # Check if git clone should be skipped (e.g., for workspace recovery from archive)
         skip_git_clone = getattr(self.task_data, "skip_git_clone", False)
+        project_id = getattr(self.task_data, "project_id", None)
         if skip_git_clone:
             logger.info(
                 f"Agent[{self.get_name()}][{self.task_id}] skip_git_clone=True, "
@@ -307,7 +308,8 @@ class Agent:
             if git_url:
                 repo_name = git_util.get_repo_name_from_url(git_url)
                 project_path = os.path.join(
-                    config.get_workspace_root(), str(self.task_id), repo_name
+                    config.get_task_workspace_path(self.task_id, project_id),
+                    repo_name,
                 )
                 if self.project_path is None:
                     self.project_path = project_path
@@ -337,7 +339,8 @@ class Agent:
         logger.info(user_config)
 
         project_path = os.path.join(
-            config.get_workspace_root(), str(self.task_id), repo_name
+            config.get_task_workspace_path(self.task_id, project_id),
+            repo_name,
         )
         if self.project_path is None:
             self.project_path = project_path

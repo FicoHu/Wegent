@@ -293,6 +293,9 @@ class TaskRequestBuilder:
         # Determine if group chat
         is_group_chat = self._is_group_chat(task)
 
+        # Extract project_id from task metadata labels
+        project_id = self._extract_project_id(task)
+
         # Auto-determine new_session for pipeline mode
         # In pipeline mode, new_session should be True when stage changes (different bot)
         # This ensures each pipeline stage has independent context
@@ -358,6 +361,7 @@ class TaskRequestBuilder:
             task_data=self._build_request_task_data(user),
             trace_context=trace_context,
             executor_name=subtask.executor_name,
+            project_id=project_id,
         )
 
     def resolve_request_preload_skills(
@@ -2265,6 +2269,25 @@ Response template:
         return task_spec.get("isGroupChat", False) or task_spec.get(
             "is_group_chat", False
         )
+
+    def _extract_project_id(self, task: TaskResource) -> Optional[int]:
+        """Extract project_id from task metadata labels.
+
+        Args:
+            task: Task resource model instance
+
+        Returns:
+            Project ID if present, None otherwise
+        """
+        task_json = task.json or {}
+        labels = task_json.get("metadata", {}).get("labels", {})
+        project_id_str = labels.get("projectId")
+        if project_id_str:
+            try:
+                return int(project_id_str)
+            except (ValueError, TypeError):
+                return None
+        return None
 
     def _generate_auth_token(
         self, task: TaskResource, subtask: Subtask, user: User

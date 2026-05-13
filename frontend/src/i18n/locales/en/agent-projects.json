@@ -1,0 +1,60 @@
+{
+  "section": {
+    "title": "Projects",
+    "empty": "No projects, click + to create",
+    "noTasks": "No tasks"
+  },
+  "actions": {
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "create": {
+    "title": "New Project",
+    "description": "Create a development project with execution environment"
+  },
+  "createTask": {
+    "title": "New Task"
+  },
+  "edit": {
+    "title": "Edit Project",
+    "description": "Modify project info (only affects new tasks)"
+  },
+  "delete": {
+    "title": "Delete Project",
+    "description": "Are you sure you want to delete project \"{{name}}\"? Tasks in the project will not be deleted."
+  },
+  "form": {
+    "name": "Project Name",
+    "namePlaceholder": "Enter project name",
+    "description": "Description (optional)",
+    "descriptionPlaceholder": "Enter project description",
+    "environment": "Execution Environment",
+    "env": {
+      "cloudDocker": "Cloud Docker",
+      "localDevice": "Local Device",
+      "cloudDevice": "Cloud Device"
+    },
+    "team": "Agent",
+    "teamPlaceholder": "Select agent",
+    "device": "Device",
+    "devicePlaceholder": "Select device",
+    "directory": "Working Directory (optional)",
+    "directoryPlaceholder": "Enter working directory path",
+    "gitUrl": "Git Repository URL (optional)",
+    "gitUrlPlaceholder": "https://github.com/user/repo.git",
+    "gitRepo": "Repository Name",
+    "gitRepoPlaceholder": "repo",
+    "gitBranch": "Branch",
+    "gitBranchPlaceholder": "main"
+  },
+  "toast": {
+    "createSuccess": "Project created",
+    "createSuccessDesc": "Project \"{{name}}\" has been created",
+    "createFailed": "Failed to create project",
+    "updateSuccess": "Project updated",
+    "updateFailed": "Failed to update project",
+    "deleteSuccess": "Project deleted",
+    "deleteFailed": "Failed to delete project",
+    "createTaskFailed": "Failed to create task"
+  }
+}

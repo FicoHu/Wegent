@@ -41,6 +41,10 @@ import {
   useProjectContext,
   DroppableHistory,
 } from '@/features/projects'
+import {
+  AgentProjectSection,
+  AgentProjectProvider,
+} from '@/features/agent-projects'
 import { useInboxUnreadCount } from '@/features/inbox'
 
 export const SIDEBAR_NAV_CONFIG = {
@@ -453,8 +457,9 @@ export default function TaskSidebar({
           )}
 
           {/* Tasks Section - matches Figma: left-[20px] top-[198px] with border */}
-          <ProjectProvider>
-            <TaskDndProvider>
+          <AgentProjectProvider>
+            <ProjectProvider>
+              <TaskDndProvider>
               <div
                 className={`${isCollapsed ? 'px-0' : 'px-2.5'} pt-4 border-t border-border-light mt-3`}
               >
@@ -609,6 +614,7 @@ export default function TaskSidebar({
               </div>
             </TaskDndProvider>
           </ProjectProvider>
+          </AgentProjectProvider>
         </div>
       </div>
 
@@ -850,10 +856,19 @@ function TaskHistorySection({
         </div>
       )}
 
-      {/* Projects Section - displayed between group chats and history */}
+      {/* Agent Projects Section - displayed between group chats and projects */}
       {!isCollapsed && !isSearchResult && (
         <div
           className={filteredGroupTasks.length > 0 ? 'pt-3 mt-2 border-t border-border-light' : ''}
+        >
+          <AgentProjectSection onTaskSelect={onTaskSelect} />
+        </div>
+      )}
+
+      {/* Projects Section - displayed between agent projects and history */}
+      {!isCollapsed && !isSearchResult && (
+        <div
+          className={'pt-3 mt-2 border-t border-border-light'}
         >
           <ProjectSection onTaskSelect={onTaskSelect} />
         </div>
