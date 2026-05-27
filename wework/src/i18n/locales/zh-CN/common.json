@@ -15,6 +15,7 @@
     "history": "对话",
     "settings": "设置",
     "empty_title": "我们该做什么？",
+    "project_empty_title": "我们应该在 {{projectName}} 中构建什么？",
     "input_placeholder": "尽管问",
     "mobile_input_placeholder": "询问 Wework",
     "quick_new_task": "新任务",

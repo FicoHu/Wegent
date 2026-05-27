@@ -113,10 +113,12 @@ export function useMessageSendQueue<TSnapshot>({
     dispatchMessageRef
       .current(nextMessage)
       .then(() => {
+        isDispatchingRef.current = false
         setQueuedMessages(current => current.filter(message => message.id !== nextMessage.id))
       })
       .catch(error => {
         const normalizedError = error instanceof Error ? error : new Error(String(error))
+        isDispatchingRef.current = false
         setQueuedMessages(current =>
           current.map(message =>
             message.id === nextMessage.id
@@ -125,9 +127,6 @@ export function useMessageSendQueue<TSnapshot>({
           )
         )
         onDispatchErrorRef.current?.(nextMessage, normalizedError)
-      })
-      .finally(() => {
-        isDispatchingRef.current = false
       })
   }, [activeTaskQueue, dispatchMode, isDispatchBlocked, taskId])
 

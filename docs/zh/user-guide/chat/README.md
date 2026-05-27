@@ -76,6 +76,7 @@ Wegent 提供多种对话模式以适应不同场景：
 | 文档 | 说明 |
 |------|------|
 | [管理任务](./managing-tasks.md) | 创建和管理对话任务 |
+| [项目工作对话](./project-work-chat.md) | 在项目上下文中发起对话并上传附件 |
 | [智能追问模式](./clarification-mode-guide.md) | 使用智能追问模式明确需求 |
 | [AI 交叉验证](./correction-mode-guide.md) | 使用 AI 交叉验证优化结果 |
 

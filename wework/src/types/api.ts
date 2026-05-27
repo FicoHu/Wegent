@@ -11,6 +11,7 @@ export interface Team {
   is_active: boolean
   default_for_modes?: string[]
   recommended_mode?: 'chat' | 'code' | 'both'
+  agent_type?: string | null
 }
 
 export interface ProjectConfig {
@@ -50,6 +51,8 @@ export interface Task {
   created_at: string
   updated_at?: string
   is_group_chat?: boolean
+  model_id?: string | null
+  requested_skills?: SkillRef[]
 }
 
 export interface TaskListResponse {
@@ -99,6 +102,11 @@ export interface ChatSendPayload {
   title?: string
   task_type?: 'chat' | 'code' | 'task' | 'knowledge' | 'video' | 'image'
   project_id?: number
+  model_id?: string
+  force_override_bot_model?: boolean
+  force_override_bot_model_type?: ModelType
+  attachment_ids?: number[]
+  additional_skills?: SkillRef[]
 }
 
 export interface ChatSendAck {
@@ -145,4 +153,72 @@ export interface TaskJoinResponse {
   }
   subtasks?: Array<Record<string, unknown>>
   error?: string
+}
+
+export type ModelType = 'public' | 'user' | 'group'
+
+export interface UnifiedModel {
+  name: string
+  type: ModelType
+  displayName?: string | null
+  provider?: string | null
+  modelId?: string | null
+  namespace?: string
+  config?: Record<string, unknown>
+  isActive?: boolean
+}
+
+export interface UnifiedModelListResponse {
+  data: UnifiedModel[]
+}
+
+export interface UnifiedSkill {
+  id: number
+  name: string
+  namespace: string
+  description: string
+  displayName?: string
+  version?: string
+  author?: string
+  tags?: string[]
+  bindShells?: string[]
+  visible?: boolean
+  is_active: boolean
+  is_public: boolean
+  user_id: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface SkillRef {
+  name: string
+  namespace: string
+  is_public: boolean
+}
+
+export type AttachmentStatus = 'uploading' | 'parsing' | 'ready' | 'failed'
+
+export interface Attachment {
+  id: number
+  filename: string
+  file_size: number
+  mime_type: string
+  status: AttachmentStatus
+  text_length?: number | null
+  error_message?: string | null
+  error_code?: string | null
+  subtask_id?: number | null
+  file_extension: string
+  created_at: string
+}
+
+export interface AttachmentUploadProgress {
+  file: File
+  progress: number
+}
+
+export interface MultiAttachmentUploadState {
+  attachments: Attachment[]
+  uploadingFiles: Map<string, AttachmentUploadProgress>
+  errors: Map<string, string>
 }

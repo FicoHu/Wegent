@@ -76,6 +76,7 @@ Flexible conversation control options:
 | Document | Description |
 |----------|-------------|
 | [Managing Tasks](./managing-tasks.md) | Creating and managing chat tasks |
+| [Project Work Chat](./project-work-chat.md) | Start conversations in a project context and upload attachments |
 | [Smart Follow-up Mode](./clarification-mode-guide.md) | Using smart follow-up mode to clarify requirements |
 | [AI Cross-Validation](./correction-mode-guide.md) | Using AI cross-validation to optimize results |
 
