@@ -8,7 +8,10 @@ use axum::{routing::get, Json, Router};
 use serde_json::json;
 use tokio::net::TcpListener;
 use wegent_executor::{
-    app::{cli::CliArgs, run, startup_plan, HttpServerPlan, SocketSidecarPlan, StartupPlan},
+    app::{
+        cli::CliArgs, run, startup_plan, startup_plan_with_app_ipc_support, HttpServerPlan,
+        SocketSidecarPlan, StartupPlan,
+    },
     services::updater::binary_name_for,
     version::get_version,
 };
@@ -67,6 +70,7 @@ fn default_startup_mode_plans_socket_sidecar_without_http_server() {
             http_server: None,
             socket_sidecar: Some(SocketSidecarPlan {
                 backend_enabled: false,
+                app_ipc_enabled: true,
                 device_id: plan.socket_sidecar.as_ref().unwrap().device_id.clone(),
             }),
         }
@@ -96,6 +100,7 @@ fn startup_plan_with_backend_enables_backend_sidecar_without_http_server() {
             http_server: None,
             socket_sidecar: Some(SocketSidecarPlan {
                 backend_enabled: true,
+                app_ipc_enabled: true,
                 device_id: "device-1".to_owned(),
             }),
         }
@@ -123,6 +128,58 @@ fn docker_executor_mode_plans_http_without_socket_sidecar() {
                 port: 10090,
             }),
             socket_sidecar: None,
+        }
+    );
+}
+
+#[test]
+fn local_startup_without_backend_or_app_ipc_plans_http_server() {
+    let _lock = env_lock();
+    let _mode = EnvGuard::remove("EXECUTOR_MODE");
+    let _backend = EnvGuard::remove("WEGENT_BACKEND_URL");
+    let _device_id = EnvGuard::remove("DEVICE_ID");
+    let _port = EnvGuard::set("PORT", "10091");
+    let _host = EnvGuard::remove("HOST");
+    let home = unique_home("no-ipc-http");
+    let _home = EnvGuard::set("WEGENT_EXECUTOR_HOME", home.to_str().unwrap());
+
+    let args = CliArgs::parse_from(["wegent-executor"]).unwrap();
+    let plan = startup_plan_with_app_ipc_support(args, false).unwrap();
+
+    assert_eq!(
+        plan,
+        StartupPlan {
+            http_server: Some(HttpServerPlan {
+                host: "0.0.0.0".to_owned(),
+                port: 10091,
+            }),
+            socket_sidecar: None,
+        }
+    );
+}
+
+#[test]
+fn backend_startup_without_app_ipc_plans_backend_only_sidecar() {
+    let _lock = env_lock();
+    let _mode = EnvGuard::remove("EXECUTOR_MODE");
+    let _port = EnvGuard::set("PORT", "10092");
+    let _backend = EnvGuard::set("WEGENT_BACKEND_URL", "http://localhost:8000");
+    let _device_id = EnvGuard::set("DEVICE_ID", "device-1");
+    let home = unique_home("backend-no-ipc");
+    let _home = EnvGuard::set("WEGENT_EXECUTOR_HOME", home.to_str().unwrap());
+
+    let args = CliArgs::parse_from(["wegent-executor"]).unwrap();
+    let plan = startup_plan_with_app_ipc_support(args, false).unwrap();
+
+    assert_eq!(
+        plan,
+        StartupPlan {
+            http_server: None,
+            socket_sidecar: Some(SocketSidecarPlan {
+                backend_enabled: true,
+                app_ipc_enabled: false,
+                device_id: "device-1".to_owned(),
+            }),
         }
     );
 }

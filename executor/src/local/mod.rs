@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod app_ipc;
+mod app_ipc_transport;
 pub mod backend;
 pub mod capabilities;
 pub mod command;

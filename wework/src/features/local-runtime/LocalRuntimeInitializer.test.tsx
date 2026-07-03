@@ -27,11 +27,20 @@ const ensureMock = vi.mocked(ensureLocalExecutorStarted)
 const readLogMock = vi.mocked(readLocalExecutorLog)
 const DEV_STARTUP_HOLD_MS = 4800
 const SLOW_STARTUP_WARNING_MS = 10000
+const ORIGINAL_NAVIGATOR_PLATFORM = window.navigator.platform
+const ORIGINAL_NAVIGATOR_USER_AGENT = window.navigator.userAgent
 
 function enableTauri() {
   Object.defineProperty(window, '__TAURI_INTERNALS__', {
     configurable: true,
     value: {},
+  })
+}
+
+function setNavigatorValue<K extends keyof Navigator>(key: K, value: Navigator[K]) {
+  Object.defineProperty(window.navigator, key, {
+    configurable: true,
+    value,
   })
 }
 
@@ -56,6 +65,8 @@ describe('LocalRuntimeInitializer', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllEnvs()
+    setNavigatorValue('platform', ORIGINAL_NAVIGATOR_PLATFORM)
+    setNavigatorValue('userAgent', ORIGINAL_NAVIGATOR_USER_AGENT)
   })
 
   test('holds the app on the initialization screen until executor is ready', async () => {
@@ -360,6 +371,20 @@ describe('LocalRuntimeInitializer', () => {
 
   test('does not block non-tauri runtimes', () => {
     delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+
+    render(
+      <LocalRuntimeInitializer>
+        <div data-testid="main-app">Main app</div>
+      </LocalRuntimeInitializer>
+    )
+
+    expect(screen.getByTestId('main-app')).toBeInTheDocument()
+    expect(ensureMock).not.toHaveBeenCalled()
+  })
+
+  test('does not initialize local executor on Windows Tauri runtimes', () => {
+    setNavigatorValue('platform', 'Win32')
+    setNavigatorValue('userAgent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
 
     render(
       <LocalRuntimeInitializer>

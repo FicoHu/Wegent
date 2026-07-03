@@ -2,27 +2,21 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{
-    collections::HashMap,
-    env, fs,
-    future::Future,
-    io,
-    path::{Path, PathBuf},
-    pin::Pin,
-    sync::Arc,
-};
+use std::{collections::HashMap, env, future::Future, io, path::PathBuf, pin::Pin, sync::Arc};
 
 use serde_json::{json, Value};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader},
-    net::UnixListener,
+    io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader},
     sync::broadcast,
 };
 
 use crate::{
     agents::resolve_codex_binary,
-    local::command::{CommandHandler, CommandRequest, CommandResult, DeviceCommandHandler},
-    logging::{format_executor_log, write_executor_log_line},
+    local::{
+        app_ipc_transport,
+        command::{CommandHandler, CommandRequest, CommandResult, DeviceCommandHandler},
+    },
+    logging::format_executor_log,
     runtime_work::RuntimeWorkRpcHandler,
     version::get_version,
 };
@@ -451,42 +445,14 @@ impl AppIpcServer {
     }
 
     pub async fn serve_forever(&self, socket_path: PathBuf) -> Result<(), String> {
-        prepare_socket_path(&socket_path).map_err(|error| {
-            format!(
-                "failed to prepare app IPC socket {}: {error}",
-                socket_path.display()
-            )
-        })?;
-        let listener = UnixListener::bind(&socket_path).map_err(|error| {
-            format!(
-                "failed to bind app IPC socket {}: {error}",
-                socket_path.display()
-            )
-        })?;
-        set_socket_permissions(&socket_path);
-        write_executor_log_line(&app_ipc_listening_log_line(
-            &self.device_id,
-            &socket_path.display().to_string(),
-        ));
-
-        loop {
-            let (stream, _) = listener.accept().await.map_err(|error| {
-                format!(
-                    "failed to accept app IPC client on {}: {error}",
-                    socket_path.display()
-                )
-            })?;
-            let server = self.clone();
-            tokio::spawn(async move {
-                if let Err(error) = server.handle_stream(stream).await {
-                    eprintln!("app IPC client error: {error}");
-                }
-            });
-        }
+        app_ipc_transport::serve_forever(self.clone(), self.device_id.clone(), socket_path).await
     }
 
-    async fn handle_stream(&self, stream: tokio::net::UnixStream) -> Result<(), String> {
-        let (reader, mut writer) = stream.into_split();
+    pub(crate) async fn handle_stream<S>(&self, stream: S) -> Result<(), String>
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        let (reader, mut writer) = tokio::io::split(stream);
         write_message(&mut writer, &self.ready_event())
             .await
             .map_err(|error| format!("failed to write app IPC ready event: {error}"))?;
@@ -968,29 +934,9 @@ fn expand_home(path: &str) -> PathBuf {
 fn home_dir() -> PathBuf {
     env::var_os("HOME")
         .map(PathBuf::from)
+        .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."))
 }
-
-fn prepare_socket_path(socket_path: &Path) -> io::Result<()> {
-    if let Some(parent) = socket_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    match fs::remove_file(socket_path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-    }
-}
-
-#[cfg(unix)]
-fn set_socket_permissions(socket_path: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-
-    let _ = fs::set_permissions(socket_path, fs::Permissions::from_mode(0o600));
-}
-
-#[cfg(not(unix))]
-fn set_socket_permissions(_socket_path: &Path) {}
 
 async fn write_message<W>(writer: &mut W, message: &Value) -> io::Result<()>
 where

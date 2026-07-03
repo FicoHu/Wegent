@@ -7,7 +7,7 @@ pub mod cli;
 use crate::config::device::{load_device_config, DeviceConfig};
 use crate::local::{
     app_ipc::{normalize_device_id, serve_app_ipc_sidecar},
-    backend::serve_local_backend_sidecar,
+    backend::{serve_local_backend_runner, serve_local_backend_sidecar},
 };
 use crate::logging::init_executor_logging;
 use crate::server::{self, ServerConfig};
@@ -84,6 +84,7 @@ pub struct HttpServerPlan {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SocketSidecarPlan {
     pub backend_enabled: bool,
+    pub app_ipc_enabled: bool,
     pub device_id: String,
 }
 
@@ -124,7 +125,7 @@ pub async fn run(args: CliArgs) -> Result<(), AppError> {
     init_executor_logging(&DeviceConfig::default());
     let config = load_device_config(args.config_path.as_deref())?;
     init_executor_logging(&config);
-    let plan = startup_plan_for_config(&config)?;
+    let plan = startup_plan_for_config(&config, local_app_ipc_supported())?;
 
     match (plan.http_server, plan.socket_sidecar) {
         (Some(http_server), None) => server::serve(http_server.server_config())
@@ -151,10 +152,11 @@ async fn serve_socket_sidecar(
     config: crate::config::device::DeviceConfig,
     plan: SocketSidecarPlan,
 ) -> Result<(), String> {
-    if plan.backend_enabled {
-        serve_local_backend_sidecar(config).await
-    } else {
-        serve_app_ipc_sidecar(plan.device_id).await
+    match (plan.backend_enabled, plan.app_ipc_enabled) {
+        (true, true) => serve_local_backend_sidecar(config).await,
+        (true, false) => serve_local_backend_runner(config).await,
+        (false, true) => serve_app_ipc_sidecar(plan.device_id).await,
+        (false, false) => Err("startup plan has no local sidecar target".to_owned()),
     }
 }
 
@@ -186,14 +188,34 @@ async fn run_upgrade(
 }
 
 pub fn startup_plan(args: CliArgs) -> Result<StartupPlan, AppError> {
+    startup_plan_with_app_ipc_support(args, local_app_ipc_supported())
+}
+
+pub fn startup_plan_with_app_ipc_support(
+    args: CliArgs,
+    app_ipc_supported: bool,
+) -> Result<StartupPlan, AppError> {
     let config = load_device_config(args.config_path.as_deref())?;
-    startup_plan_for_config(&config)
+    startup_plan_for_config(&config, app_ipc_supported)
 }
 
 fn startup_plan_for_config(
     config: &crate::config::device::DeviceConfig,
+    app_ipc_supported: bool,
 ) -> Result<StartupPlan, AppError> {
     if config.runtime_mode() == crate::config::device::RuntimeMode::Docker {
+        let server = ServerConfig::from_env()?;
+        return Ok(StartupPlan {
+            http_server: Some(HttpServerPlan {
+                host: server.host,
+                port: server.port,
+            }),
+            socket_sidecar: None,
+        });
+    }
+
+    let backend_enabled = !config.connection.backend_url.trim().is_empty();
+    if !backend_enabled && !app_ipc_supported {
         let server = ServerConfig::from_env()?;
         return Ok(StartupPlan {
             http_server: Some(HttpServerPlan {
@@ -207,8 +229,13 @@ fn startup_plan_for_config(
     Ok(StartupPlan {
         http_server: None,
         socket_sidecar: Some(SocketSidecarPlan {
-            backend_enabled: !config.connection.backend_url.trim().is_empty(),
+            backend_enabled,
+            app_ipc_enabled: app_ipc_supported,
             device_id: normalize_device_id(config.device_id.clone()),
         }),
     })
+}
+
+fn local_app_ipc_supported() -> bool {
+    cfg!(unix)
 }

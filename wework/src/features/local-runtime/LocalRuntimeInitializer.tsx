@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { MacOSTitleBarDragRegion } from '@/components/layout/MacOSTitleBarDragRegion'
 import { getRuntimeConfig } from '@/config/runtime'
 import { useTranslation } from '@/hooks/useTranslation'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { supportsLocalExecutorAppIpc } from '@/lib/runtime-environment'
 import {
   copyLocalExecutorDebugInfo,
   ensureLocalExecutorStarted,
@@ -59,7 +59,7 @@ interface LocalRuntimeDebugInfo {
 }
 
 function shouldInitializeLocalRuntime(): boolean {
-  return getRuntimeConfig().runtimeMode === 'local-first' && isTauriRuntime()
+  return getRuntimeConfig().runtimeMode === 'local-first' && supportsLocalExecutorAppIpc()
 }
 
 function localRuntimeError(

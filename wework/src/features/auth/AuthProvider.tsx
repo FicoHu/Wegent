@@ -4,7 +4,7 @@ import { createAuthApi, isAuthenticated, removeToken, type LoginRequest } from '
 import { ApiError, createHttpClient } from '@/api/http'
 import { getLocalUser } from '@/api/local/localSession'
 import { getRuntimeConfig, stripAppBasePath } from '@/config/runtime'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { supportsLocalExecutorAppIpc } from '@/lib/runtime-environment'
 import type { User } from '@/types/api'
 import {
   getAdminUsernameFromSetupError,
@@ -27,7 +27,7 @@ function createDefaultAuthApi(): AuthApi {
 }
 
 function isLocalFirstRuntime(): boolean {
-  return getRuntimeConfig().runtimeMode === 'local-first' && isTauriRuntime()
+  return getRuntimeConfig().runtimeMode === 'local-first' && supportsLocalExecutorAppIpc()
 }
 
 function isAuthRoute(pathname: string) {

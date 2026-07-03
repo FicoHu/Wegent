@@ -697,6 +697,12 @@ pub async fn serve_local_backend_sidecar(config: DeviceConfig) -> Result<(), Str
     }
 }
 
+pub async fn serve_local_backend_runner(config: DeviceConfig) -> Result<(), String> {
+    let backend_config = LocalBackendConfig::from_device_config(config);
+    let runner = LocalBackendRunner::new(backend_config, SocketIoTransport::default());
+    runner.run_forever().await
+}
+
 fn app_ipc_sidecar_device_id(config: &LocalBackendConfig) -> String {
     env::var(APP_IPC_DEVICE_ID_ENV)
         .ok()
