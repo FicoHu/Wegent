@@ -1714,6 +1714,7 @@ export function WorkspaceBrowserPanel({
   return (
     <div
       data-testid="workspace-browser-panel"
+      data-embedded-browser-label={label}
       className={cn(
         'flex h-full min-h-0 w-full flex-col bg-background text-text-primary',
         !active && 'hidden'

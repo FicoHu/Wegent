@@ -584,6 +584,7 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
   const { t } = useTranslation('common')
   const { t: tChat } = useTranslation('chat')
   const currentRuntimeTask = pane.currentRuntimeTask
+  const currentRuntimeTaskId = currentRuntimeTask?.taskId ?? null
   const currentProject = pane.currentProject
   const currentRuntimeProject = state.runtimeWork?.projects.find(
     projectWork => currentProject && runtimeProjectUiId(projectWork.project) === currentProject.id
@@ -1606,28 +1607,21 @@ const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane({
   ])
 
   useEffect(() => {
-    if (!initialBlankBrowserMigration || !currentRuntimeTask) return
+    if (!initialBlankBrowserMigration || !currentRuntimeTaskId) return
     if (migratedEmbeddedBrowserLabel !== initialBlankBrowserMigration.browserLabel) return
 
-    let disposed = false
-    void relabelEmbeddedBrowser(
-      initialBlankBrowserMigration.browserLabel,
-      defaultEmbeddedBrowserLabel
-    )
+    const sourceLabel = initialBlankBrowserMigration.browserLabel
+    void relabelEmbeddedBrowser(sourceLabel, defaultEmbeddedBrowserLabel)
       .then(() => {
-        if (!disposed) {
-          setMigratedEmbeddedBrowserLabel(null)
-        }
+        setMigratedEmbeddedBrowserLabel(currentLabel =>
+          currentLabel === sourceLabel ? null : currentLabel
+        )
       })
       .catch(error => {
         console.error('Failed to migrate embedded browser label:', error)
       })
-
-    return () => {
-      disposed = true
-    }
   }, [
-    currentRuntimeTask,
+    currentRuntimeTaskId,
     defaultEmbeddedBrowserLabel,
     initialBlankBrowserMigration,
     migratedEmbeddedBrowserLabel,

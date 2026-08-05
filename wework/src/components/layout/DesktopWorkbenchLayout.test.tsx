@@ -76,6 +76,9 @@ const cloudDesktopExtensionMock = vi.hoisted(() => {
     launch,
   }
 })
+const embeddedBrowserMocks = vi.hoisted(() => ({
+  relabelEmbeddedBrowser: vi.fn(),
+}))
 
 vi.mock('@extensions/cloud-desktop', () => ({
   cloudDesktopExtension: cloudDesktopExtensionMock,
@@ -83,6 +86,11 @@ vi.mock('@extensions/cloud-desktop', () => ({
 
 vi.mock('@/features/experimental-features/useExperimentalFeaturesEnabled', () => ({
   useExperimentalFeaturesEnabled: () => experimentalFeatures.enabled,
+}))
+
+vi.mock('@/lib/embedded-browser', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/embedded-browser')>()),
+  relabelEmbeddedBrowser: embeddedBrowserMocks.relabelEmbeddedBrowser,
 }))
 
 vi.mock('./useWorkbenchPaneSession', () => ({
@@ -550,6 +558,7 @@ describe('DesktopWorkbenchLayout', () => {
     deliveryApiMock.listCloudProjects.mockResolvedValue({ items: [] })
     cloudDesktopExtensionMock.available = false
     cloudDesktopExtensionMock.launch.mockResolvedValue(true)
+    embeddedBrowserMocks.relabelEmbeddedBrowser.mockResolvedValue(undefined)
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       value: 1024,
@@ -7902,6 +7911,62 @@ describe('DesktopWorkbenchLayout', () => {
     expect(activePane().getByTestId('workspace-browser-frame')).toHaveAttribute(
       'src',
       'https://example.com/'
+    )
+  })
+
+  test('commits a blank browser label migration after runtime task rerenders', async () => {
+    const migration = createDeferred<void>()
+    embeddedBrowserMocks.relabelEmbeddedBrowser
+      .mockImplementationOnce(() => migration.promise)
+      .mockImplementation(() => new Promise<void>(() => {}))
+    const { propsForTask, taskA } = createLocalRuntimeTaskPanelFixture()
+    const taskProps = propsForTask(taskA)
+    const blankProps = {
+      ...taskProps,
+      state: {
+        ...taskProps.state,
+        currentRuntimeTask: null,
+      },
+    }
+    const activePane = () => within(screen.getByTestId('desktop-workbench-main'))
+    const { rerender } = render(<DesktopWorkbenchLayout {...blankProps} />)
+
+    await userEvent.click(activePane().getByTestId('toggle-right-workspace-panel-button'))
+    await userEvent.click(activePane().getByTestId('right-workspace-browser-option'))
+    const blankBrowserLabel = activePane()
+      .getByTestId('workspace-browser-panel')
+      .getAttribute('data-embedded-browser-label')
+    expect(blankBrowserLabel).toBeTruthy()
+
+    rerender(<DesktopWorkbenchLayout {...taskProps} />)
+    await waitFor(() =>
+      expect(embeddedBrowserMocks.relabelEmbeddedBrowser).toHaveBeenCalledWith(
+        blankBrowserLabel,
+        'workspace-browser-runtime-a'
+      )
+    )
+    expect(activePane().getByTestId('workspace-browser-panel')).toHaveAttribute(
+      'data-embedded-browser-label',
+      blankBrowserLabel
+    )
+
+    rerender(
+      <DesktopWorkbenchLayout
+        {...propsForTask({
+          ...taskA,
+        })}
+      />
+    )
+    await act(async () => {
+      migration.resolve()
+      await migration.promise
+    })
+
+    await waitFor(() =>
+      expect(activePane().getByTestId('workspace-browser-panel')).toHaveAttribute(
+        'data-embedded-browser-label',
+        'workspace-browser-runtime-a'
+      )
     )
   })
 
